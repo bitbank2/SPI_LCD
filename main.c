@@ -56,7 +56,6 @@ int x, y;
 		return 0;
 	}
 
-#ifdef BOGUS
     // Scroll the display while drawing tiles in the landscape orientation
 	spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
 	for (x=0; x<=640; x++)
@@ -73,7 +72,6 @@ int x, y;
 	}
 	
 	usleep(2000000);
-#endif
 
     // Measure the maximum screen refresh rate in FPS
 	iTime = MilliTime();
@@ -87,14 +85,9 @@ int x, y;
 
     // Erase and start over in portrait orientation
     spilcdFill(0);
-    spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
-//	spilcdScrollReset();
+    spilcdSetOrientation(LCD_ORIENTATION_PORTRAIT);
+    spilcdScrollReset();
     
-	for (y=0; y<320; y+=32)
-	{
-		spilcdWriteString(0,y,"This is a test!", 0xf800, 0xffff, 1);
-	}
-#ifdef BOGUS
     // Draw scrolling 8x8 text with various background/foreground colors
 	for (rc=0; rc<320; rc++)
 	{
@@ -114,7 +107,6 @@ int x, y;
 		spilcdWriteString(0, rc, "90 Degrees rotated text", 0x7e0, 0xf800,0);
 	}
 	spilcdWriteString(0, 0, "Big Rotated Text!", usColors[2], usColors[3],1);
-#endif // BOGUS
 	usleep(3000000);
     // Quit library and free resources
 	spilcdShutdown();
