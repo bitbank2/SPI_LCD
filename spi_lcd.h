@@ -50,8 +50,11 @@ void spilcdScroll(int iLines, int iFillColor);
 // Draw a 16x16 tile
 int spilcdDrawTile(int x, int y, unsigned char *pTile, int iPitch);
 
-// Draw a 16x16 tile scaled to 24x24 with pixel averaging
+// Draw a 16x16 tile scaled to 32x24 with pixel averaging
 int spilcdDrawScaledTile(int x, int y, unsigned char *pTile, int iPitch);
+
+// Draw a 16x16 tile scaled to 16x14 with pixel averaging
+int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch);
 
 // Write a text string to the display at x (column 0-83) and y (row 0-5)
 // bLarge = 0 - 8x8 font, bLarge = 1 - 16x24 font
@@ -74,5 +77,7 @@ int spilcdSetOrientation(int iOrientation);
 #define LCD_ORIENTATION_LANDSCAPE 2
 #define LCD_ILI9341 1
 #define LCD_HX8357 2
+#define LCD_ST7735 3
+
 
 #endif // SPI_LCD_H

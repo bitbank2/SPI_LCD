@@ -29,6 +29,15 @@
 
 unsigned short usColors[8] = {0xf800, 0x7e0, 0x1f, 0xffff, 0xffe0, 0x7ff, 0xf81f, 0x7bef};
 
+#define LCD LCD_ST7735
+int width=128, height=160;
+
+//#define LCD LCD_ILI9341
+//int width=240, height=320;
+
+//#define LCD LCD_HX8357
+//int width=320, height=480;
+
 int MilliTime()
 {
 int iTime;
@@ -49,7 +58,7 @@ int x, y;
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0
 	// Pass it the GPIO pin numbers used for the following:
-	rc = spilcdInit(LCD_HX8357, 0, 18, 22, 12); // SPI Channel, D/C, RST, LED
+	rc = spilcdInit(LCD, 0, 18, 22, 12); // SPI Channel, D/C, RST, LED
 	if (rc != 0)
 	{
 		printf("Problem initializing spilcd library\n");
@@ -62,9 +71,9 @@ int x, y;
 	{
 		if ((x & 15) == 0)
 		{
-			for (y=0; y<=224; y+= 16)
+			for (y=0; y<=width-16; y+= 16)
 			{
-				spilcdDrawTile(160, y, (unsigned char *)usColors, 0);
+				spilcdDrawTile(height/2, y, (unsigned char *)usColors, 0);
 			}
 		}
 		spilcdScroll(1, -1);
@@ -89,20 +98,20 @@ int x, y;
     spilcdScrollReset();
     
     // Draw scrolling 8x8 text with various background/foreground colors
-	for (rc=0; rc<320; rc++)
+	for (rc=0; rc<height; rc++)
 	{
 		spilcdScroll(2, 0);
 		if ((rc & 3) == 0)
-			spilcdWriteString(0, 312, "This is a test of scrolling text", usColors[(rc>>3)&7], usColors[((rc>>3)+1)&7],0);
+			spilcdWriteString(0, height-8, "This is a test of scrolling text", usColors[(rc>>3)&7], usColors[((rc>>3)+1)&7],0);
 		usleep(33000);
 	}
-	spilcdWriteString(0, 160, "Big Text!", usColors[0], usColors[1],1);
+	spilcdWriteString(0, height/2, "Big Text!", usColors[0], usColors[1],1);
 	usleep(2000000);
     
     // Change to landscape orientation and draw more text
 	spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
 	spilcdFill(0);
-	for (rc=0; rc<240; rc += 8)
+	for (rc=0; rc<width; rc += 8)
 	{
 		spilcdWriteString(0, rc, "90 Degrees rotated text", 0x7e0, 0xf800,0);
 	}

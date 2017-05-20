@@ -91,7 +91,7 @@ static unsigned char ucBCM2835Pins[] = {0,0,0,RPI_V2_GPIO_P1_03,0,RPI_V2_GPIO_P1
 // faster speeds, but it doesn't appear to work at 62Mhz
 // On the Raspberry Pi
 //
-#define SPI_FREQ 12000000
+#define SPI_FREQ 24000000
 
 typedef enum
 {
@@ -132,6 +132,31 @@ static unsigned char uc240InitList[] = {
         0
 };
 
+// List of command/parameters to initialize the st7735 display
+static unsigned char uc128InitList[] = {
+//	4, 0xb1, 0x01, 0x2c, 0x2d,	// frame rate control
+//	4, 0xb2, 0x01, 0x2c, 0x2d,	// frame rate control (idle mode)
+//	7, 0xb3, 0x01, 0x2c, 0x2d, 0x01, 0x2c, 0x2d, // frctrl - partial mode
+//	2, 0xb4, 0x07,	// non-inverted
+//	4, 0xc0, 0x82, 0x02, 0x84,	// power control
+//	2, 0xc1, 0xc5, 	// pwr ctrl2
+//	2, 0xc2, 0x0a, 0x00, // pwr ctrl3
+//	3, 0xc3, 0x8a, 0x2a, // pwr ctrl4
+//	3, 0xc4, 0x8a, 0xee, // pwr ctrl5
+//	2, 0xc5, 0x0e,		// pwr ctrl
+//	1, 0x20,	// display inversion off
+	2, 0x3a, 0x55,	// pixel format RGB565
+	2, 0x36, 0xc0, // MADCTL
+	17, 0xe0, 0x09, 0x16, 0x09,0x20,
+		0x21,0x1b,0x13,0x19,
+		0x17,0x15,0x1e,0x2b,
+		0x04,0x05,0x02,0x0e, // gamma sequence
+	17, 0xe1, 0x0b,0x14,0x08,0x1e,
+		0x22,0x1d,0x18,0x1e,
+		0x1b,0x1a,0x24,0x2b,
+		0x06,0x06,0x02,0x0f,
+	0
+};
 // List of command/parameters to initialize the hx8357 display
 static unsigned char uc480InitList[] = {
 	2, 0x3a, 0x55,
@@ -194,7 +219,7 @@ int spilcdInit(int iType, int iChannel, int iDC, int iReset, int iLED)
 unsigned char *s;
 int i, iCount;
 
-	if (iType != LCD_ILI9341 && iType != LCD_HX8357)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357)
 	{
 		printf("Unsupported display type\n");
 		return -1;
@@ -306,11 +331,17 @@ int i, iCount;
 		iWidth = 240;
 		iHeight = 320;
 	}
-	else
+	else if (iLCDType == LCD_HX8357)
 	{
 		s = uc480InitList;
 		iWidth = 320;
 		iHeight = 480;
+	}
+	else // ST7735
+	{
+		s = uc128InitList;
+		iWidth = 128;
+		iHeight = 160;
 	}
 	iCount  = 1;
 	while (iCount)
@@ -413,7 +444,7 @@ void spilcdScroll(int iLines, int iFillColor)
 {
 	iScrollOffset = (iScrollOffset + iLines) % iHeight;
 	spilcdWriteCommand(0x37); // Vertical scrolling start address
-	if (iLCDType == LCD_ILI9341)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
 	{
 		spilcdWriteData16(iScrollOffset);
 	}
@@ -553,7 +584,7 @@ int t;
 	y = (y + iScrollOffset) % iHeight; // scroll offset affects writing position
 
 	spilcdWriteCommand(0x2a); // set column address
-	if (iLCDType == LCD_ILI9341)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
 	{
 		ucBuf[0] = (unsigned char)(x >> 8);
 		ucBuf[1] = (unsigned char)x;
@@ -579,7 +610,7 @@ int t;
 		myspiWrite(ucBuf, 8); 
 	}
 	spilcdWriteCommand(0x2b); // set row address
-	if (iLCDType == LCD_ILI9341)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
 	{
 		ucBuf[0] = (unsigned char)(y >> 8);
 		ucBuf[1] = (unsigned char)y;
@@ -622,6 +653,72 @@ static void spilcdWriteDataBlock(unsigned char *ucBuf, int iLen)
 } /* spilcdWriteDataBlock() */
 
 //
+// Draw a 16x16 tile as 16x14 (with pixel averaging)
+// This is for drawing 160x144 video games onto a 160x128 display
+// It is assumed that the display is set to LANDSCAPE orientation
+//
+int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch)
+{
+unsigned char ucTemp[448];
+int i, j, iPitch32;
+uint16_t *d;
+uint32_t *s;
+uint32_t u32A, u32B, u32a, u32b, u32C, u32D;
+uint32_t u32Magic = 0xf7def7de;
+uint32_t u32Mask = 0xffff;
+
+        if (file_spi < 0) return -1;
+
+        // scale y coordinate for shrinking
+        y = (y * 7)/8;
+        iPitch32 = iPitch/4;
+        for (j=0; j<16; j+=2) // 16 source lines (2 at a time)
+        {
+                s = (uint32_t *)&pTile[j * 2];
+                d = (uint16_t *)&ucTemp[j*28];
+                for (i=0; i<16; i+=2) // 16 source columns (2 at a time)
+                {
+                        u32A = s[(15-i)*iPitch32]; // read A+C
+                        u32B = s[(14-i)*iPitch32]; // read B+D
+                        u32C = u32A >> 16;
+                        u32D = u32B >> 16;
+                        u32A &= u32Mask;
+                        u32B &= u32Mask;
+			if (i == 0 || i == 8) // pixel average a pair
+			{
+                        	u32a = (u32A & u32Magic) >> 1;
+                        	u32a += ((u32B & u32Magic) >> 1);
+                        	u32b = (u32C & u32Magic) >> 1;
+                        	u32b += ((u32D & u32Magic) >> 1);
+				d[0] = __builtin_bswap16(u32a);
+				d[14] = __builtin_bswap16(u32b);
+				d++;
+			}
+			else
+			{
+                        	d[0] = __builtin_bswap16(u32A);
+                        	d[1] = __builtin_bswap16(u32B);
+                        	d[14] = __builtin_bswap16(u32C);
+                        	d[15] = __builtin_bswap16(u32D);
+                       		d += 2;
+			}
+                } // for i
+        } // for j
+        spilcdSetPosition(x, y+13, 16, 14); // since RAM is oriented diff, adjust y
+        if (((x + iScrollOffset) % iHeight) > iHeight-16) // need to write in 2 parts since it won't wrap
+        {
+                int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
+                spilcdWriteDataBlock(ucTemp, iStart*28); // first N lines
+                spilcdSetPosition(x+iStart, y+13, 16-iStart, 14);
+                spilcdWriteDataBlock(&ucTemp[iStart*28], 448-(iStart*28));
+        }
+        else // can write in one shot
+        {
+                spilcdWriteDataBlock(ucTemp, 448);
+	}
+	return 0;
+} /* spilcdDrawSmallTile() */
+//
 // Draw a 16x16 RGB565 tile scaled to 32x24
 // The main purpose of this function is for GameBoy emulation
 // Since the original display is 160x144, this function allows it to be 
@@ -637,7 +734,7 @@ static void spilcdWriteDataBlock(unsigned char *ucBuf, int iLen)
 //               +-+-+-+-+
 //
 // The x/y coordinates will be scaled
-// Only portrait orientation is supported
+// It is assumed that the display is set to LANDSCAPE orientation
 //
 int spilcdDrawScaledTile(int x, int y, unsigned char *pTile, int iPitch)
 {
