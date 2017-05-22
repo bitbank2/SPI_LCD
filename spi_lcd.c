@@ -91,7 +91,6 @@ static unsigned char ucBCM2835Pins[] = {0,0,0,RPI_V2_GPIO_P1_03,0,RPI_V2_GPIO_P1
 // faster speeds, but it doesn't appear to work at 62Mhz
 // On the Raspberry Pi
 //
-#define SPI_FREQ 24000000
 
 typedef enum
 {
@@ -214,7 +213,7 @@ static void myPinWrite(int iPin, int iValue)
 //
 // Initialize the LCD controller and clear the display
 //
-int spilcdInit(int iType, int iChannel, int iDC, int iReset, int iLED)
+int spilcdInit(int iType, int iChannel, int iSPIFreq, int iDC, int iReset, int iLED)
 {
 unsigned char *s;
 int i, iCount;
@@ -244,10 +243,13 @@ int i, iCount;
     bcm2835_spi_begin();
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
-    if (iLCDType == LCD_ILI9341)
+    if (iSPIFreq >= 32000000)
        bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_4); // 32Mhz
-    else
+    else if (iSPIFreq >= 16000000)
        bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_8); // 16Mhz
+    else
+       bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_16); // 8Mhz
+
     bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
     file_spi = 0;
@@ -264,7 +266,7 @@ int i, iCount;
 	}
         if (gpioInitialise() < 0)
                 printf("pigpio failed to initialize\n");
-        file_spi = spiOpen(iChannel, SPI_FREQ, 0);
+        file_spi = spiOpen(iChannel, iSPIFreq, 0);
 #endif // USE_PIGPIO
 
 #ifdef USE_WIRINGPI
@@ -278,7 +280,7 @@ int i, iCount;
 		return -1;
 	}
         wiringPiSetup(); // initialize GPIO interface
-	file_spi = wiringPiSPISetup(iChannel, SPI_FREQ); // Initialize SPI channel
+	file_spi = wiringPiSPISetup(iChannel, iSPIFreq); // Initialize SPI channel
 #endif
 	if (file_spi < 0)
 	{
