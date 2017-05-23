@@ -311,7 +311,7 @@ int i, iCount;
 	usleep(100000);
 	myPinWrite(iResetPin, 1);
 	usleep(200000);
-//	myPinWrite(iLEDPin, 1); // turn on the backlight
+	myPinWrite(iLEDPin, 1); // turn on the backlight
 
 
 	spilcdWriteCommand(0x01); // software reset
