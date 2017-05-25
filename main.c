@@ -91,12 +91,10 @@ int x, y;
 	iTime = MilliTime() - iTime;
     
 	printf("Full screen updates max out at %03.2f FPS\n",10000.0/(float)iTime);
-
     // Erase and start over in portrait orientation
     spilcdFill(0);
-    spilcdSetOrientation(LCD_ORIENTATION_PORTRAIT);
+    spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
     spilcdScrollReset();
-    
     // Draw some rectangles
     iTime = MilliTime();
     for (rc=0; rc<10000; rc++)
@@ -113,8 +111,9 @@ int x, y;
     }
     iTime = MilliTime() - iTime;
     printf("10000 random rectangles in %d ms\n", iTime);
-	usleep(3000000);
+    usleep(3000000);
 
+    spilcdSetOrientation(LCD_ORIENTATION_PORTRAIT);
     // Draw scrolling 8x8 text with various background/foreground colors
 	for (rc=0; rc<height; rc++)
 	{
@@ -135,6 +134,7 @@ int x, y;
 	}
 	spilcdWriteString(0, 0, "Big Rotated Text!", usColors[2], usColors[3],1);
 	usleep(3000000);
+
     // Quit library and free resources
 	spilcdShutdown();
 

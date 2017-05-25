@@ -53,6 +53,7 @@ static int iScrollOffset; // current scroll amount
 static int iOrientation = LCD_ORIENTATION_PORTRAIT; // default to 'natural' orientation
 static int iLCDType;
 static int iWidth, iHeight;
+static int iCurrentWidth, iCurrentHeight; // reflects virtual size due to orientation
 
 static void spilcdWriteCommand(unsigned char);
 static void spilcdWriteData8(unsigned char c);
@@ -330,20 +331,20 @@ int i, iCount;
 	if (iLCDType == LCD_ILI9341)
 	{
 		s = uc240InitList;
-		iWidth = 240;
-		iHeight = 320;
+		iCurrentWidth = iWidth = 240;
+		iCurrentHeight = iHeight = 320;
 	}
 	else if (iLCDType == LCD_HX8357)
 	{
 		s = uc480InitList;
-		iWidth = 320;
-		iHeight = 480;
+		iCurrentWidth = iWidth = 320;
+		iCurrentHeight = iHeight = 480;
 	}
 	else // ST7735
 	{
 		s = uc128InitList;
-		iWidth = 128;
-		iHeight = 160;
+		iCurrentWidth = iWidth = 128;
+		iCurrentHeight = iHeight = 160;
 	}
 	iCount  = 1;
 	while (iCount)
@@ -490,32 +491,13 @@ void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor, int bFi
 {
 unsigned char ucTemp[960]; // max length
 uint32_t u32Color, *pu32;
-int i, iPerLine, iStart;
-int trueY, trueH, trueX, trueW;
+int i, ty, th, iPerLine, iStart;
 
 	// check bounds
-	if (iOrientation == LCD_ORIENTATION_PORTRAIT)
-	{
-		if (x < 0 || x >= iWidth || x+w >= iWidth)
-			return; // out of bounds
-		if (y < 0 || y >= iHeight || y+h >= iHeight)
-			return;
-		trueX = x;
-		trueY = y;
-		trueW = w;
-		trueH = h;
-	}
-	else
-	{
-		if (y < 0 || y >= iWidth || y+h >= iWidth)
-			return;
-		if (x < 0 || x >= iHeight || x+w >= iHeight)
-			return;
-		trueY = x;
-		trueH = w;
-		trueX = iWidth - x - 1;
-		trueW = h;
-	}
+	if (x < 0 || x >= iCurrentWidth || x+w >= iCurrentWidth)
+		return; // out of bounds
+	if (y < 0 || y >= iCurrentHeight || y+h >= iCurrentHeight)
+		return;
 	u32Color = usColor >> 8;
 	u32Color |= (usColor & 0xff) << 8;
 	u32Color |= (u32Color << 16);
@@ -523,52 +505,57 @@ int trueY, trueH, trueX, trueW;
 	for (i=0; i<240; i++) // prepare big buffer of color
 		*pu32++ = u32Color;
 
+	ty = (iCurrentWidth == iWidth) ? y:x;
+	th = (iCurrentWidth == iWidth) ? h:w;
 	if (bFill)
 	{
-		iPerLine = trueW*2; // bytes to write per line
-	       	spilcdSetPosition(trueX, trueY, trueW, trueH);
-	        if (((trueY + iScrollOffset) % iHeight) > iHeight-trueH) // need to write in 2 parts since it won't wrap
+		iPerLine = (iCurrentWidth == iWidth) ? w*2:h*2; // bytes to write per line
+	       	spilcdSetPosition(x, y, w, h);
+	        if (((ty + iScrollOffset) % iHeight) > iHeight-th) // need to write in 2 parts since it won't wrap
 		{
-                iStart = (iHeight - ((trueY+iScrollOffset) % iHeight));
-		for (i=0; i<iStart; i++)
-                	spilcdWriteDataBlock(ucTemp, iStart*iPerLine); // first N lines
-			spilcdSetPosition(trueX, trueY+iStart, trueW, trueH-iStart);
-			for (i=0; i<trueH-iStart; i++)
+               		iStart = (iHeight - ((ty+iScrollOffset) % iHeight));
+			for (i=0; i<iStart; i++)
+                		spilcdWriteDataBlock(ucTemp, iStart*iPerLine); // first N lines
+			if (iCurrentWidth == iWidth)
+				spilcdSetPosition(x, y+iStart, w, h-iStart);
+			else
+				spilcdSetPosition(x+iStart, y, w-iStart, h);
+			for (i=0; i<th-iStart; i++)
                	 		spilcdWriteDataBlock(ucTemp, iPerLine);
        		 }
         	else // can write in one shot
         	{
-			for (i=0; i<trueH; i++)
+			for (i=0; i<th; i++)
                		 	spilcdWriteDataBlock(ucTemp, iPerLine);
         	}
 	}
 	else // outline
 	{
 		// draw top/bottom
-		spilcdSetPosition(trueX, trueY, trueW, 1);
-		spilcdWriteDataBlock(ucTemp, trueW*2);
-		spilcdSetPosition(trueX, trueY + trueH-1, trueW, 1);
-		spilcdWriteDataBlock(ucTemp, trueW*2);
+		spilcdSetPosition(x, y, w, 1);
+		spilcdWriteDataBlock(ucTemp, w*2);
+		spilcdSetPosition(x, y + h-1, w, 1);
+		spilcdWriteDataBlock(ucTemp, w*2);
 		// draw left/right
-		if (((trueY + iScrollOffset) % iHeight) > iHeight-h)	
+		if (((ty + iScrollOffset) % iHeight) > iHeight-th)	
 		{
-			iStart = (iHeight - ((trueY+iScrollOffset) % iHeight));
-			spilcdSetPosition(trueX, trueY, 1, iStart);
+			iStart = (iHeight - ((ty+iScrollOffset) % iHeight));
+			spilcdSetPosition(x, y, 1, iStart);
 			spilcdWriteDataBlock(ucTemp, iStart*2);
-			spilcdSetPosition(trueX+trueW-1, trueY, 1, iStart);
+			spilcdSetPosition(x+w-1, y, 1, iStart);
 			spilcdWriteDataBlock(ucTemp, iStart*2);
 			// second half
-			spilcdSetPosition(trueX,trueY+iStart, 1, trueH-iStart);
-			spilcdWriteDataBlock(ucTemp, (trueH-iStart)*2);
-			spilcdSetPosition(trueX+trueW-1, trueY+iStart, 1, trueH-iStart);
-			spilcdWriteDataBlock(ucTemp, (trueH-iStart)*2);
+			spilcdSetPosition(x,y+iStart, 1, h-iStart);
+			spilcdWriteDataBlock(ucTemp, (h-iStart)*2);
+			spilcdSetPosition(x+w-1, y+iStart, 1, h-iStart);
+			spilcdWriteDataBlock(ucTemp, (h-iStart)*2);
 		}
 		else // can do it in 1 shot
 		{
-			spilcdSetPosition(trueX, trueY, 1, trueH);
-			spilcdWriteDataBlock(ucTemp, trueH*2);
-			spilcdSetPosition(trueX + trueW-1, trueY, 1, trueH);
-			spilcdWriteDataBlock(ucTemp, trueH*2);
+			spilcdSetPosition(x, y, 1, h);
+			spilcdWriteDataBlock(ucTemp, h*2);
+			spilcdSetPosition(x + w-1, y, 1, h);
+			spilcdWriteDataBlock(ucTemp, h*2);
 		}
 	} // outline
 } /* spilcdRectangle() */
@@ -663,7 +650,7 @@ int t;
 	{
 		// rotate the coordinate system
 		t = x;
-		x = iWidth-1-y;
+		x = iWidth-y-h;
 		y = t;
 		// flip the width/height too
 		t = w;
@@ -793,12 +780,12 @@ uint32_t u32Mask = 0xffff;
 			}
                 } // for i
         } // for j
-        spilcdSetPosition(x, y+13, 16, 14); // since RAM is oriented diff, adjust y
+        spilcdSetPosition(x, y, 16, 14);
         if (((x + iScrollOffset) % iHeight) > iHeight-16) // need to write in 2 parts since it won't wrap
         {
                 int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
                 spilcdWriteDataBlock(ucTemp, iStart*28); // first N lines
-                spilcdSetPosition(x+iStart, y+13, 16-iStart, 14);
+                spilcdSetPosition(x+iStart, y, 16-iStart, 14);
                 spilcdWriteDataBlock(&ucTemp[iStart*28], 448-(iStart*28));
         }
         else // can write in one shot
@@ -866,12 +853,12 @@ uint32_t u32Mask = 0xffff;
 			d += 3;
 		} // for i
 	} // for j
-        spilcdSetPosition(x, y+23, 32, 24); // since RAM is oriented diff, adjust y
+        spilcdSetPosition(x, y, 32, 24);
         if (((x + iScrollOffset) % iHeight) > iHeight-32) // need to write in 2 parts since it won't wrap
         {
                 int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
                 spilcdWriteDataBlock(ucTemp, iStart*48); // first N lines
-                spilcdSetPosition(x+iStart, y+23, 32-iStart, 24);
+                spilcdSetPosition(x+iStart, y, 32-iStart, 24);
                 spilcdWriteDataBlock(&ucTemp[iStart*48], 1536-(iStart*48));
         }
         else // can write in one shot
@@ -908,12 +895,12 @@ unsigned char *s, *d;
                         	d += 2;
                 	} // for i;
         	} // for j
-        	spilcdSetPosition(x, y+15, 16, 16); // since RAM is oriented diff, adjust y
+        	spilcdSetPosition(x, y, 16, 16);
 		if (((x + iScrollOffset) % iHeight) > iHeight-16) // need to write in 2 parts since it won't wrap
 		{
 			int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
 			spilcdWriteDataBlock(ucTemp, iStart*32); // first N lines
-			spilcdSetPosition(x+iStart, y+15, 16-iStart, 16); 
+			spilcdSetPosition(x+iStart, y, 16-iStart, 16); 
 			spilcdWriteDataBlock(&ucTemp[iStart*32], 512-(iStart*32));
 		}
 		else // can write in one shot
@@ -1104,6 +1091,8 @@ int spilcdSetOrientation(int iOrient)
 	if (iOrient != LCD_ORIENTATION_PORTRAIT && iOrient != LCD_ORIENTATION_LANDSCAPE)
 		return -1;
 	iOrientation = iOrient; // nothing else needed to do
+	iCurrentWidth = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iWidth : iHeight;
+	iCurrentHeight = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iHeight : iWidth;
 	return 0;
 } /* spilcdSetOrientation() */
 
