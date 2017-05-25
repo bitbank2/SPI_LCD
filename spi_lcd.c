@@ -983,7 +983,7 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & 0xff)<< 8);
 			usD = &usTemp[0];
 			if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // rotated
 			{
-				spilcdSetPosition(x+(i*16), y+31,16,32);
+				spilcdSetPosition(x+(i*16), y,16,32);
 				for (j=0; j<8; j++)
 				{
 					for (k=0; k<32; k++) // for each scanline
@@ -1046,7 +1046,7 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & 0xff)<< 8);
 			usD = &usTemp[0];
 			if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // draw rotated
 			{
-				spilcdSetPosition(x+(i*8), y+7, 8, 8);
+				spilcdSetPosition(x+(i*8), y, 8, 8);
 				for (k=0; k<8; k++) // for each scanline
 				{
 					for (j=0; j<8; j++)
