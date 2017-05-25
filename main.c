@@ -67,7 +67,7 @@ int x, y;
 
     // Scroll the display while drawing tiles in the landscape orientation
 	spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
-	for (x=0; x<=640; x++)
+	for (x=0; x<=320; x++)
 	{
 		if ((x & 15) == 0)
 		{
@@ -97,6 +97,24 @@ int x, y;
     spilcdSetOrientation(LCD_ORIENTATION_PORTRAIT);
     spilcdScrollReset();
     
+    // Draw some rectangles
+    iTime = MilliTime();
+    for (rc=0; rc<10000; rc++)
+    {
+       unsigned short usColor;
+       int w, h, bFill;
+       usColor = usColors[rand() & 7];
+       x = rand() & 255;
+       y = rand() & 511;
+       w = rand() & 127; 
+       h = rand() & 127;
+       bFill = rand() & 1;
+       spilcdRectangle(x, y, w, h, usColor, bFill);
+    }
+    iTime = MilliTime() - iTime;
+    printf("10000 random rectangles in %d ms\n", iTime);
+	usleep(3000000);
+
     // Draw scrolling 8x8 text with various background/foreground colors
 	for (rc=0; rc<height; rc++)
 	{

@@ -486,6 +486,93 @@ void spilcdScroll(int iLines, int iFillColor)
 
 } /* spilcdScroll() */
 
+void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor, int bFill)
+{
+unsigned char ucTemp[960]; // max length
+uint32_t u32Color, *pu32;
+int i, iPerLine, iStart;
+int trueY, trueH, trueX, trueW;
+
+	// check bounds
+	if (iOrientation == LCD_ORIENTATION_PORTRAIT)
+	{
+		if (x < 0 || x >= iWidth || x+w >= iWidth)
+			return; // out of bounds
+		if (y < 0 || y >= iHeight || y+h >= iHeight)
+			return;
+		trueX = x;
+		trueY = y;
+		trueW = w;
+		trueH = h;
+	}
+	else
+	{
+		if (y < 0 || y >= iWidth || y+h >= iWidth)
+			return;
+		if (x < 0 || x >= iHeight || x+w >= iHeight)
+			return;
+		trueY = x;
+		trueH = w;
+		trueX = iWidth - x - 1;
+		trueW = h;
+	}
+	u32Color = usColor >> 8;
+	u32Color |= (usColor & 0xff) << 8;
+	u32Color |= (u32Color << 16);
+	pu32 = (uint32_t *)&ucTemp[0];
+	for (i=0; i<240; i++) // prepare big buffer of color
+		*pu32++ = u32Color;
+
+	if (bFill)
+	{
+		iPerLine = trueW*2; // bytes to write per line
+	       	spilcdSetPosition(trueX, trueY, trueW, trueH);
+	        if (((trueY + iScrollOffset) % iHeight) > iHeight-trueH) // need to write in 2 parts since it won't wrap
+		{
+                iStart = (iHeight - ((trueY+iScrollOffset) % iHeight));
+		for (i=0; i<iStart; i++)
+                	spilcdWriteDataBlock(ucTemp, iStart*iPerLine); // first N lines
+			spilcdSetPosition(trueX, trueY+iStart, trueW, trueH-iStart);
+			for (i=0; i<trueH-iStart; i++)
+               	 		spilcdWriteDataBlock(ucTemp, iPerLine);
+       		 }
+        	else // can write in one shot
+        	{
+			for (i=0; i<trueH; i++)
+               		 	spilcdWriteDataBlock(ucTemp, iPerLine);
+        	}
+	}
+	else // outline
+	{
+		// draw top/bottom
+		spilcdSetPosition(trueX, trueY, trueW, 1);
+		spilcdWriteDataBlock(ucTemp, trueW*2);
+		spilcdSetPosition(trueX, trueY + trueH-1, trueW, 1);
+		spilcdWriteDataBlock(ucTemp, trueW*2);
+		// draw left/right
+		if (((trueY + iScrollOffset) % iHeight) > iHeight-h)	
+		{
+			iStart = (iHeight - ((trueY+iScrollOffset) % iHeight));
+			spilcdSetPosition(trueX, trueY, 1, iStart);
+			spilcdWriteDataBlock(ucTemp, iStart*2);
+			spilcdSetPosition(trueX+trueW-1, trueY, 1, iStart);
+			spilcdWriteDataBlock(ucTemp, iStart*2);
+			// second half
+			spilcdSetPosition(trueX,trueY+iStart, 1, trueH-iStart);
+			spilcdWriteDataBlock(ucTemp, (trueH-iStart)*2);
+			spilcdSetPosition(trueX+trueW-1, trueY+iStart, 1, trueH-iStart);
+			spilcdWriteDataBlock(ucTemp, (trueH-iStart)*2);
+		}
+		else // can do it in 1 shot
+		{
+			spilcdSetPosition(trueX, trueY, 1, trueH);
+			spilcdWriteDataBlock(ucTemp, trueH*2);
+			spilcdSetPosition(trueX + trueW-1, trueY, 1, trueH);
+			spilcdWriteDataBlock(ucTemp, trueH*2);
+		}
+	} // outline
+} /* spilcdRectangle() */
+
 //
 // Sends a command to turn off the LCD display
 // Turns off the backlight LED

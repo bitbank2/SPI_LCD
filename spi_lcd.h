@@ -29,6 +29,11 @@ void spilcdShutdown(void);
 int spilcdFill(unsigned short usPattern);
 
 //
+// Draw a rectangle and optionally fill it
+//
+void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor, int bFill);
+
+//
 // Reset the scroll position to 0
 //
 void spilcdScrollReset(void);
