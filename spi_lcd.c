@@ -494,9 +494,9 @@ uint32_t u32Color, *pu32;
 int i, ty, th, iPerLine, iStart;
 
 	// check bounds
-	if (x < 0 || x >= iCurrentWidth || x+w >= iCurrentWidth)
+	if (x < 0 || x >= iCurrentWidth || x+w > iCurrentWidth)
 		return; // out of bounds
-	if (y < 0 || y >= iCurrentHeight || y+h >= iCurrentHeight)
+	if (y < 0 || y >= iCurrentHeight || y+h > iCurrentHeight)
 		return;
 	u32Color = usColor >> 8;
 	u32Color |= (usColor & 0xff) << 8;
