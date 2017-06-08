@@ -1,7 +1,7 @@
 *** SPI_LCD ***
 
 SPI_LCD is a C library for working with the SPI-connected LCD
-displays which use the ILI9341 or HX8357 controller chips. The idea is to
+displays which use the ST7735, ILI9341 or HX8357 controller chips. The idea is to
 provide a simple interface for C programmers to make use of
 those low-cost LCD displays without having to read the data sheet or figure
 out SPI programming. My main purpose of writing this library is not to
@@ -31,7 +31,7 @@ per second possible, so you can see how each library performs on your hardware.
 
 Features
 --------
-- Supports ili9341 (240x320) and hx8357 (320x480) displays
+- Supports st7735 (128x160), ili9341 (240x320) and hx8357 (320x480) displays
 - Works in both landscape and portrait orientation
 - Two sizes of text drawing with custom fg/bg color
 - Fast 16x16 tile drawing for gaming
@@ -41,6 +41,7 @@ Features
 - Backlight on/off
 - Portable C code with wrapper functions for I/O; easy to compile on any system
 - GPIO input functions for reading button input without a keyboard driver
+- xpt2046 touch controller input
 
 To build the library, simply type 'make' in the terminal. To build the sample
 app, type 'make -f make_sample'. This will build the 'lcd' executable to show
