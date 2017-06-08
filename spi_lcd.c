@@ -48,7 +48,10 @@
 
 extern unsigned char ucFont[];
 static int file_spi = -1; // SPI system handle
+static int file_touch = -1; // SPI handle for touch controller
+static int iTouchChannel, iTouchType;
 static int iDCPin, iResetPin, iLEDPin; // pin numbers for the GPIO control lines
+static int iMinX, iMaxX, iMinY, iMaxY; // touch calibration values
 static int iScrollOffset; // current scroll amount
 static int iOrientation = LCD_ORIENTATION_PORTRAIT; // default to 'natural' orientation
 static int iLCDType;
@@ -173,6 +176,22 @@ static unsigned char uc480InitList[] = {
 };
 
 //
+// Wrapper function for simultaneous read/write to SPI bus
+//
+static int myspiReadWrite(unsigned char *pTxBuf, unsigned char *pRxBuf, int iLen)
+{
+int i = 0;
+#ifdef USE_PIGPIO
+	i = spiXfer(file_touch, (char *)pTxBuf, (char *)pRxBuf, iLen);
+#endif
+#ifdef USE_WIRINGPI
+	memcpy(pRxBuf, pTxBuf, iLen);
+	i = wiringPiSPIDataRW(iTouchChannel, pRxBuf); 
+#endif
+return i;
+} /* myspiReadWrite() */
+
+//
 // Wrapper function for writing to SPI
 //
 static void myspiWrite(unsigned char *pBuf, int iLen)
@@ -210,6 +229,102 @@ static void myPinWrite(int iPin, int iValue)
 	digitalWrite(iPin, (iValue) ? HIGH: LOW);
 #endif
 } /* myPinWrite() */
+
+//
+// Read the current touch values
+//
+// returns -1 for error, 0 for no touch info, 1 for touch info
+//
+int spilcdReadTouchPos(int *pX, int *pY)
+{
+// commands and SPI transaction filler to read 3 byte response for x/y
+unsigned char ucReadX[] = {0xd0,0x00,0x00};
+unsigned char ucReadY[] = {0x90,0x00,0x00};
+unsigned char ucRxBuf[6];
+int x, y;
+
+	if (pX == NULL || pY == NULL)
+		return -1;
+	myspiReadWrite(ucReadX, ucRxBuf, 3);
+	myspiReadWrite(ucReadY, &ucRxBuf[3], 3);
+	x = ((ucRxBuf[2] + (ucRxBuf[1]<<8)) >> 4); // top 12 bits
+	y = ((ucRxBuf[5] + (ucRxBuf[4]<<8)) >> 4);
+	if (x > iMaxX) x = iMaxX;
+	x -= iMinX;
+	if (x < 0) x = 0;
+	if (y > iMaxY) y = iMaxY;
+	y -= iMinY;
+	if (y < 0) y = 0;
+	// normalize values to be in 0-1023 range
+	x = (x << 10)/(iMaxX - iMinX);
+	y = (y << 10)/(iMaxY - iMinY);
+	// flip coordinate system
+	x = 1023-x;
+	y = 1023-y;
+	if (x < 0) x = 0;
+	if (y < 0) y = 0;
+	*pX = x;
+	*pY = y;
+
+	return (ucRxBuf[1] != 0 || ucRxBuf[2] != 0);
+} /* spilcdreadTouchPos() */
+
+void spilcdShutdownTouch(void)
+{
+#ifdef USE_PIGPIO
+                spiClose(file_touch);
+		gpioTerminate();
+#endif
+#ifdef USE_WIRINGPI
+                close(file_touch);
+#endif // USE_WIRINGPI
+
+                file_touch = -1;
+
+} /* spilcdShutdownTouch() */
+
+//
+// Set calibration values for touch input
+//
+void spilcdTouchCalibration(int iminx, int imaxx, int iminy, int imaxy)
+{
+	iMinX = iminx;
+	iMaxX = imaxx;
+	iMinY = iminy;
+	iMaxY = imaxy;
+
+} /* spilcdTouchCalibration() */
+
+//
+// Initialize the touch controller
+//
+int spilcdInitTouch(int iType, int iChannel, int iSPIFreq)
+{
+unsigned char ucInitString[] = {0x80,0x00,0x00};
+unsigned char ucRxBuf[4];
+
+	if (iType != TOUCH_XPT2046)
+		return -1;
+
+	iTouchChannel = iChannel;
+	iTouchType = iType;
+#ifdef USE_PIGPIO
+	if (gpioInitialise() < 0)
+	{
+                printf("pigpio failed to initialize\n");
+		return -1;
+	}
+
+	file_touch = spiOpen(iChannel, iSPIFreq, 0);
+#endif
+#ifdef USE_WIRINGPI
+	 wiringPiSetup();
+	 file_touch = wiringPiSPISetup(iChannel, iSPIFreq);
+#endif
+	myspiReadWrite(ucInitString, ucRxBuf, 4);
+	return 0;
+
+} /* spilcdInitTouch() */
 
 //
 // Initialize the LCD controller and clear the display

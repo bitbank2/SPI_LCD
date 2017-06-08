@@ -1,5 +1,5 @@
 //
-// HX8357 LCD display test program
+// LCD display test program
 //
 // Copyright (c) 2017 Larry Bank
 // email: bitbank@pobox.com
@@ -53,7 +53,23 @@ int main(int argc, char* argv[])
 {
 int rc;
 int iTime;
-int x, y;
+int i, x, y;
+
+#ifdef TEST_TOUCH_CONTROLLER
+
+	spilcdInitTouch(TOUCH_XPT2046, 1, 50000);
+	spilcdTouchCalibration(149, 1949, 58, 1949);
+	for (i=0; i<200; i++)
+	{
+		rc = spilcdReadTouchPos(&x, &y);
+		if (rc != 0)
+			printf("x,y = %d,%d\n", x, y);
+		usleep(100000);
+	}
+	spilcdShutdownTouch();
+	return 0;
+
+#endif // TEST_TOUCH_CONTROLLER
 
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0

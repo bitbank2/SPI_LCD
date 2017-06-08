@@ -22,6 +22,30 @@
 // Initialize the library
 int spilcdInit(int iLCDType, int iSPIChannel, int iSPIFreq, int iDCPin, int iResetPin, int iLEDPin);
 
+//
+// Initialize the touch controller
+//
+int spilcdInitTouch(int iType, int iChannel, int iSPIFreq);
+
+//
+// Set touch calibration values
+// These are the minimum and maximum x/y values returned from the sensor
+// These values are used to normalize the position returned from the sensor
+//
+void spilcdTouchCalibration(int iminx, int imaxx, int iminy, int imaxy);
+
+//
+// Shut down the touch interface
+//
+void spilcdShutdownTouch(void);
+
+//
+// Read the current touch values
+// values are normalized to 0-1023 range for x and y
+// returns: -1=not initialized, 0=nothing touching, 1=good values
+//
+int spilcdReadTouchPos(int *pX, int *pY);
+
 // Turns off the display and frees the resources
 void spilcdShutdown(void);
 
@@ -84,5 +108,7 @@ int spilcdSetOrientation(int iOrientation);
 #define LCD_HX8357 2
 #define LCD_ST7735 3
 
+// touch panel types
+#define TOUCH_XPT2046 1
 
 #endif // SPI_LCD_H
