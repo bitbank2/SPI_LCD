@@ -82,6 +82,9 @@ int spilcdDrawTile(int x, int y, unsigned char *pTile, int iPitch);
 // Draw a 16x16 tile scaled to 32x24 with pixel averaging
 int spilcdDrawScaledTile(int x, int y, unsigned char *pTile, int iPitch);
 
+// Draw a 16x16 tile as 16x13 (with priority to non-black pixels)
+int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch);
+
 // Draw a 16x16 tile scaled to 16x14 with pixel averaging
 int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch);
 

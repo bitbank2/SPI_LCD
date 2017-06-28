@@ -844,6 +844,59 @@ static void spilcdWriteDataBlock(unsigned char *ucBuf, int iLen)
 } /* spilcdWriteDataBlock() */
 
 //
+// Draw a 16x16 tile as 16x13 (with priority to non-black pixels)
+// This is for drawing a 224x288 image onto a 320x240 display in landscape
+//
+int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch)
+{
+unsigned char ucTemp[416];
+int i, j, iPitch16;
+uint16_t *s, *d, u16A, u16B;
+
+        if (file_spi < 0) return -1;
+
+        // scale y coordinate for shrinking
+        y = (y * 13)/16;
+        iPitch16 = iPitch/2;
+        for (j=0; j<16; j++) // 16 destination columns
+        {
+                s = (uint16_t *)&pTile[j * 2];
+                d = (uint16_t *)&ucTemp[j*26];
+                for (i=0; i<16; i++) // 13 actual source rows
+                {
+			if (i == 0 || i == 7 || i == 14) // combined pixels
+			{
+				u16A = s[(15-i)*iPitch16];
+				u16B = s[(14-i)*iPitch16];
+				if (u16A == 0)
+					*d++ = __builtin_bswap16(u16B);
+				else
+					*d++ = __builtin_bswap16(u16A);
+				i++; // advance count since we merged 2 lines 
+			}
+			else // just copy
+			{
+                                *d++ = __builtin_bswap16(s[(15-i)*iPitch16]);
+                        }
+                } // for i
+        } // for j
+        spilcdSetPosition(x, y, 16, 13);
+        if (((x + iScrollOffset) % iHeight) > iHeight-16) // need to write in 2 parts since it won't wrap
+        {
+                int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
+                spilcdWriteDataBlock(ucTemp, iStart*26); // first N lines
+                spilcdSetPosition(x+iStart, y, 16-iStart, 13);
+                spilcdWriteDataBlock(&ucTemp[iStart*26], 416-(iStart*26));
+        }
+        else // can write in one shot
+        {
+                spilcdWriteDataBlock(ucTemp, 416);
+        }
+        return 0;
+
+} /* spilcdDrawRetroTile() */
+
+//
 // Draw a 16x16 tile as 16x14 (with pixel averaging)
 // This is for drawing 160x144 video games onto a 160x128 display
 // It is assumed that the display is set to LANDSCAPE orientation
