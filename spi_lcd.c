@@ -864,7 +864,7 @@ uint16_t *s, *d, u16A, u16B;
                 d = (uint16_t *)&ucTemp[j*26];
                 for (i=0; i<16; i++) // 13 actual source rows
                 {
-			if (i == 0 || i == 7 || i == 14) // combined pixels
+			if (i == 0 || i == 5 || i == 10) // combined pixels
 			{
 				u16A = s[(15-i)*iPitch16];
 				u16B = s[(14-i)*iPitch16];
