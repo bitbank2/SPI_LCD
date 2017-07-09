@@ -186,7 +186,7 @@ int i = 0;
 #endif
 #ifdef USE_WIRINGPI
 	memcpy(pRxBuf, pTxBuf, iLen);
-	i = wiringPiSPIDataRW(iTouchChannel, pRxBuf); 
+//	i = wiringPiSPIDataRW(iTouchChannel, pRxBuf); 
 #endif
 return i;
 } /* myspiReadWrite() */
@@ -1035,6 +1035,86 @@ uint32_t u32Mask = 0xffff;
         }
 	return 0;
 } /* spilcdDrawScaledTile() */
+
+//
+// Draw a 16x16 RGB656 tile with select rows/columns removed
+// the mask contains 1 bit for every column/row that should be drawn
+// For example, to skip the first 2 columns, the mask value would be 0xfffc
+//
+int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iColMask, int iRowMask)
+{
+unsigned char ucTemp[512]; // fix the byte order first to write it more quickly
+int i, j;
+unsigned char *s, *d;
+int iNumCols, iNumRows, iTotalSize;
+
+	iNumCols = __builtin_popcount(iColMask);
+	iNumRows = __builtin_popcount(iRowMask);
+	iTotalSize = iNumCols * iNumRows * 2;
+
+        if (file_spi < 0) return -1;
+
+        if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // need to rotate the data
+        {
+                // First convert to big-endian order
+                d = ucTemp;
+                for (j=0; j<16; j++)
+                {
+			if ((iColMask & (1<<j)) == 0) continue; // skip row
+                        s = &pTile[j*2];
+                        for (i=0; i<16; i++)
+                        {
+				if ((iRowMask & (1<<i)) == 0) continue; // skip column
+                                d[1] = s[(15-i)*iPitch];
+                                d[0] = s[((15-i)*iPitch)+1]; // swap byte order (MSB first)
+                                d += 2;
+                        } // for i;
+                } // for j
+                spilcdSetPosition(x, y, iNumCols, iNumRows);
+                if (((x + iScrollOffset) % iHeight) > iHeight-iNumRows) // need to write in 2 parts since it won't wrap
+                {
+                        int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
+                        spilcdWriteDataBlock(ucTemp, iStart*iNumRows*2); // first N lines
+                        spilcdSetPosition(x+iStart, y, iNumRows-iStart, iNumCols);
+                        spilcdWriteDataBlock(&ucTemp[iStart*iNumRows*2], iTotalSize-(iStart*iNumRows*2));
+                }
+                else // can write in one shot
+                {
+                        spilcdWriteDataBlock(ucTemp, iTotalSize);
+                }
+        }
+        else // native orientation
+        {
+        // First convert to big-endian order
+        d = ucTemp;
+        for (j=0; j<16; j++)
+        {
+		if ((iRowMask & (1<<j)) == 0) continue; // skip row
+                s = &pTile[j*iPitch];
+                for (i=0; i<16; i++)
+                {
+			if ((iColMask & (1<<i)) == 0) continue; // skip col
+                        d[1] = s[0];
+                        d[0] = s[1]; // swap byte order (MSB first)
+                        d += 2;
+                        s += 2;
+                } // for i;
+        } // for j
+        spilcdSetPosition(x, y, iNumCols, iNumRows);
+        if (((y + iScrollOffset) % iHeight) > iHeight-iNumRows) // need to write in 2 parts since it won't wrap
+        {
+                int iStart = (iHeight - ((y+iScrollOffset) % iHeight));
+                spilcdWriteDataBlock(ucTemp, iStart*iNumCols*2); // first N lines
+                spilcdSetPosition(x, y+iStart, iNumCols, iNumRows-iStart);
+                spilcdWriteDataBlock(&ucTemp[iStart*iNumCols*2], iTotalSize-(iStart*iNumCols*2));
+        }
+        else // can write in one shot
+        {
+                spilcdWriteDataBlock(ucTemp, iTotalSize);
+        }
+        } // portrait orientation
+        return 0;
+} /* spilcdDrawMaskedTile() */
 
 //
 // Draw a 16x16 RGB565 tile

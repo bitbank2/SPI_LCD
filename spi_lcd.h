@@ -79,6 +79,9 @@ void spilcdScroll(int iLines, int iFillColor);
 // Draw a 16x16 tile
 int spilcdDrawTile(int x, int y, unsigned char *pTile, int iPitch);
 
+// Draw a 16x16 tile with variable cols/rows removed
+int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iColMask, int iRowMask);
+
 // Draw a 16x16 tile scaled to 32x24 with pixel averaging
 int spilcdDrawScaledTile(int x, int y, unsigned char *pTile, int iPitch);
 
