@@ -329,7 +329,7 @@ unsigned char ucRxBuf[4];
 //
 // Initialize the LCD controller and clear the display
 //
-int spilcdInit(int iType, int iChannel, int iSPIFreq, int iDC, int iReset, int iLED)
+int spilcdInit(int iType, int bFlipped, int iChannel, int iSPIFreq, int iDC, int iReset, int iLED)
 {
 unsigned char *s;
 int i, iCount;
@@ -446,18 +446,30 @@ int i, iCount;
 	if (iLCDType == LCD_ILI9341)
 	{
 		s = uc240InitList;
+		if (bFlipped)
+			s[50] = 0x88; // flip 180
+		else
+			s[50] = 0x48; // normal orientation
 		iCurrentWidth = iWidth = 240;
 		iCurrentHeight = iHeight = 320;
 	}
 	else if (iLCDType == LCD_HX8357)
 	{
 		s = uc480InitList;
+		if (bFlipped)
+			s[65] = 0x88; // flip 180
+		else
+			s[65] = 0x48; // normal orientation
 		iCurrentWidth = iWidth = 320;
 		iCurrentHeight = iHeight = 480;
 	}
 	else // ST7735
 	{
 		s = uc128InitList;
+		if (bFlipped)
+			s[5] = 0x00; // flipped 180 degrees
+		else
+			s[5] = 0xc0; // normal orientation
 		iCurrentWidth = iWidth = 128;
 		iCurrentHeight = iHeight = 160;
 	}

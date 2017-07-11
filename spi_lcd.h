@@ -20,7 +20,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 // Initialize the library
-int spilcdInit(int iLCDType, int iSPIChannel, int iSPIFreq, int iDCPin, int iResetPin, int iLEDPin);
+int spilcdInit(int iLCDType, int bFlipped, int iSPIChannel, int iSPIFreq, int iDCPin, int iResetPin, int iLEDPin);
 
 //
 // Initialize the touch controller
