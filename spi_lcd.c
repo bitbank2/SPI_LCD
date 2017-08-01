@@ -22,10 +22,11 @@
 // control lines. 
 
 // Use one of the following 3 libraries for talking to the SPI/GPIO
-//#define USE_PIGPIO
+#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-#define USE_NANOPI2
+//#define USE_NANOPI2
+//#define USE_NANOPIK2
 
 #include <unistd.h>
 #include <stdio.h>
@@ -47,7 +48,7 @@
 #include <pigpio.h>
 #endif // USE_PIGPIO
 
-#ifdef USE_NANOPI2
+#if defined( USE_NANOPI2 ) || defined( USE_NANOPIK2 )
 #include <linux/spi/spidev.h>
 static struct spi_ioc_transfer xfer;
 static unsigned char ucRXBuf[1024];
@@ -82,6 +83,10 @@ static unsigned char ucNanoPins[] = {0xff,0xff,0xff,99,0xff,98,0xff,32+28,96+21,
                        64+8,0xff,64+9,64+28,64+10,0xff,64+12,64+7,64+11,162,0xff,163};
 
 #endif // USE_NANOPI2
+
+#ifdef USE_NANOPIK2
+static unsigned char ucNanoPins[] = {0xff,0xff,0xff,205,0xff,206,0xff,249,113,0xff,114,247,238,239,0xff,239,236,0xff,233,235,0xff,232,231,230,229,0xff,225,0xff,225,0xff,0xff,228,0xff,219,224,234,0xff,214,218,0xff,0xff,0xff,0xff};
+#endif // USE_NANOPIK2
 
 #ifdef USE_PIGPIO
 static unsigned char ucPIGPins[] = {0xff,0xff,0xff,2,0xff,3,0xff,4,14,0xff,15,
@@ -213,7 +218,7 @@ return i;
 //
 static void myspiWrite(unsigned char *pBuf, int iLen)
 {
-#ifdef USE_NANOPI2
+#if defined( USE_NANOPI2 ) || defined (USE_NANOPIK2)
 	xfer.tx_buf = (unsigned long)pBuf;
 	xfer.len = iLen;
 	ioctl(file_spi, SPI_IOC_MESSAGE(1), &xfer);
@@ -236,7 +241,7 @@ static void myspiWrite(unsigned char *pBuf, int iLen)
 //
 static void myPinWrite(int iPin, int iValue)
 {
-#ifdef USE_NANOPI2
+#if defined (USE_NANOPI2) || defined(USE_NANOPIK2)
 int file_gpio;
 char szTemp[64];
 	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iPin);
@@ -358,7 +363,7 @@ unsigned char ucRxBuf[4];
 
 } /* spilcdInitTouch() */
 
-#ifdef USE_NANOPI2
+#if defined(USE_NANOPI2) || defined(USE_NANOPIK2)
 void NanoAddGPIO(int iPin, int iDirection)
 {
 char szName[64];
@@ -445,7 +450,7 @@ int i, iCount;
         file_spi = spiOpen(iChannel, iSPIFreq, 0);
 #endif // USE_PIGPIO
 
-#ifdef USE_NANOPI2
+#if defined( USE_NANOPI2) || defined(USE_NANOPIK2)
 	iDCPin = ucNanoPins[iDC];
 	iResetPin = ucNanoPins[iReset];
 	iLEDPin = ucNanoPins[iLED];
@@ -487,7 +492,7 @@ int i, iCount;
 		return -1;
 	}
 
-#ifdef USE_NANOPI2
+#if defined( USE_NANOPI2) || defined (USE_NANOPIK2)
 	NanoAddGPIO(iDCPin, GPIO_OUT);
 	NanoAddGPIO(iResetPin, GPIO_OUT);
 	NanoAddGPIO(iLEDPin, GPIO_OUT);
@@ -596,7 +601,7 @@ int spilcdConfigurePin(int iPin)
 {
 int iGPIO;
 
-#ifdef USE_NANOPI2
+#if defined( USE_NANOPI2 ) || defined( USE_NANOPIK2 )
 	iGPIO = ucNanoPins[iPin];
 	if (iGPIO == 0xff) // invalid pin number
 		return -1;
@@ -634,7 +639,7 @@ int spilcdReadPin(int iPin)
 {
 int iGPIO;
 
-#ifdef USE_NANOPI2
+#if defined( USE_NANOPI2 ) || defined (USE_NANOPIK2) 
 {
 char szTemp[64];
 int file_gpio;
@@ -808,7 +813,7 @@ void spilcdShutdown(void)
 	if (file_spi >= 0)
 	{
 		spilcdWriteCommand(0x29); // Display OFF
-#ifdef USE_NANOPI2
+#if defined ( USE_NANOPI2 ) || defined (USE_NANOPIK2)
 	close(file_spi);
 #endif // USE_NANOPI2
 
