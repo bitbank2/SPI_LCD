@@ -22,11 +22,13 @@
 // control lines. 
 
 // Use one of the following 3 libraries for talking to the SPI/GPIO
-#define USE_PIGPIO
+//#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
+#define USE_GENERIC
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
+#define USE_ORANGEPIZERO
 
 #include <unistd.h>
 #include <stdio.h>
@@ -48,14 +50,14 @@
 #include <pigpio.h>
 #endif // USE_PIGPIO
 
-#if defined( USE_NANOPI2 ) || defined( USE_NANOPIK2 )
+#ifdef USE_GENERIC
 #include <linux/spi/spidev.h>
 static struct spi_ioc_transfer xfer;
 static unsigned char ucRXBuf[1024];
 #define GPIO_OUT 0
 #define GPIO_IN 1
 
-#endif // USE_NANOPI2
+#endif // USE_GENERIC
 
 extern unsigned char ucFont[];
 static int file_spi = -1; // SPI system handle
@@ -77,15 +79,21 @@ static void spilcdWriteDataBlock(unsigned char *pData, int iLen);
 static void myPinWrite(int iPin, int iValue);
 int spilcdFill(unsigned short usData);
 
+#ifdef USE_ORANGEPIZERO
+static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,198,0xff,199,1,7,0,0xff,3,19,0xff,18,15,0xff,16,2,14,13,0xff,10,0xff,0xff,0xff,0xff,
+0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
+//static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,13,
+//0xff,14,1,110,0,0xff,3,68,0xff,71,64,0xff,65,2,66,67,0xff,21,19,18,7,0xff,8,200,9,0xff,10,201,20,198,0xff,199};
+#endif // ORANGEPIZERO
 #ifdef USE_NANOPI2
-static unsigned char ucNanoPins[] = {0xff,0xff,0xff,99,0xff,98,0xff,32+28,96+21,0xff,96+17,
+static unsigned char ucGenericPins[] = {0xff,0xff,0xff,99,0xff,98,0xff,32+28,96+21,0xff,96+17,
                        32+29,32+26,32+30,0xff,32+31,64+14,0xff,32+27,64+31,0xff,96+0,96+1,64+29,64+30,0xff,64+13,103,102,
                        64+8,0xff,64+9,64+28,64+10,0xff,64+12,64+7,64+11,162,0xff,163};
 
 #endif // USE_NANOPI2
 
 #ifdef USE_NANOPIK2
-static unsigned char ucNanoPins[] = {0xff,0xff,0xff,205,0xff,206,0xff,211,102,0xff,225,212,227,213,0xff,214,226,0xff,215,216,0xff,218,217,220,219,0xff,221,207,208,222,0xff,127,223,155,0xff,252,0xff,0xff,0xff,0xff,0xff};
+static unsigned char ucGenericPins[] = {0xff,0xff,0xff,205,0xff,206,0xff,211,102,0xff,225,212,227,213,0xff,214,226,0xff,215,216,0xff,218,217,220,219,0xff,221,207,208,222,0xff,127,223,155,0xff,252,0xff,0xff,0xff,0xff,0xff};
 #endif // USE_NANOPIK2
 
 #ifdef USE_PIGPIO
@@ -218,11 +226,11 @@ return i;
 //
 static void myspiWrite(unsigned char *pBuf, int iLen)
 {
-#if defined( USE_NANOPI2 ) || defined (USE_NANOPIK2)
+#ifdef USE_GENERIC
 	xfer.tx_buf = (unsigned long)pBuf;
 	xfer.len = iLen;
 	ioctl(file_spi, SPI_IOC_MESSAGE(1), &xfer);
-#endif // USE_NANOPI2
+#endif // USE_GENERIC
  
 #ifdef USE_PIGPIO
     spiWrite(file_spi, (char *)pBuf, iLen);
@@ -241,7 +249,7 @@ static void myspiWrite(unsigned char *pBuf, int iLen)
 //
 static void myPinWrite(int iPin, int iValue)
 {
-#if defined (USE_NANOPI2) || defined(USE_NANOPIK2)
+#ifdef USE_GENERIC
 int file_gpio;
 char szTemp[64];
 	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iPin);
@@ -249,7 +257,7 @@ char szTemp[64];
 	if (iValue) write(file_gpio, "1", 1);
 	else write(file_gpio, "0", 1);
 	close(file_gpio);
-#endif // USE_NANOPI2
+#endif // USE_GENERIC
 
 #ifdef USE_BCM2835
 	if (iValue)
@@ -363,8 +371,8 @@ unsigned char ucRxBuf[4];
 
 } /* spilcdInitTouch() */
 
-#if defined(USE_NANOPI2) || defined(USE_NANOPIK2)
-void NanoAddGPIO(int iPin, int iDirection)
+#ifdef USE_GENERIC
+void GenericAddGPIO(int iPin, int iDirection)
 {
 char szName[64];
 int file_gpio;
@@ -379,8 +387,8 @@ int file_gpio;
 	else
 		write(file_gpio, "in", 2);
 	close(file_gpio);
-} /* NanoAddGPIO() */
-void NanoRemoveGPIO(int iPin)
+} /* GenericAddGPIO() */
+void GenericRemoveGPIO(int iPin)
 {
 int file_gpio;
 char szTemp[64];
@@ -388,8 +396,8 @@ char szTemp[64];
 	sprintf(szTemp, "%d", iPin);
 	write(file_gpio, szTemp, strlen(szTemp));
 	close(file_gpio);
-} /* NanoRemoveGPIO() */
-#endif // USE_NANOPI2
+} /* GenericRemoveGPIO() */
+#endif // USE_GENERIC
 
 //
 // Initialize the LCD controller and clear the display
@@ -450,19 +458,21 @@ int i, iCount;
         file_spi = spiOpen(iChannel, iSPIFreq, 0);
 #endif // USE_PIGPIO
 
-#if defined( USE_NANOPI2) || defined(USE_NANOPIK2)
-	iDCPin = ucNanoPins[iDC];
-	iResetPin = ucNanoPins[iReset];
-	iLEDPin = ucNanoPins[iLED];
+#ifdef USE_GENERIC
+	iDCPin = ucGenericPins[iDC];
+	iResetPin = ucGenericPins[iReset];
+	iLEDPin = ucGenericPins[iLED];
 	if (iDCPin == 0xff || iResetPin == 0xff || iLEDPin == 0xff)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
 	}
 	{
+	char szName[32];
 	int iSPIMode = 0;
 	int i = iSPIFreq;
-	file_spi = open("/dev/spidev0.0", O_RDWR);
+	sprintf(szName,"/dev/spidev%d.0", iChannel);
+	file_spi = open(szName, O_RDWR);
 	ioctl(file_spi, SPI_IOC_WR_MODE, &iSPIMode);
 	ioctl(file_spi, SPI_IOC_WR_MAX_SPEED_HZ, &i);
 	memset(&xfer, 0, sizeof(xfer));
@@ -471,7 +481,7 @@ int i, iCount;
 	xfer.bits_per_word = 8;
 	xfer.rx_buf = (unsigned long)ucRXBuf; // dummy receive buffer
 	}
-#endif // USE_NANOPI2
+#endif // USE_GENERIC
 
 #ifdef USE_WIRINGPI
 	iDCPin = ucWPPins[iDC];
@@ -492,11 +502,11 @@ int i, iCount;
 		return -1;
 	}
 
-#if defined( USE_NANOPI2) || defined (USE_NANOPIK2)
-	NanoAddGPIO(iDCPin, GPIO_OUT);
-	NanoAddGPIO(iResetPin, GPIO_OUT);
-	NanoAddGPIO(iLEDPin, GPIO_OUT);
-#endif // USE_NANOPI2
+#ifdef USE_GENERIC
+	GenericAddGPIO(iDCPin, GPIO_OUT);
+	GenericAddGPIO(iResetPin, GPIO_OUT);
+	GenericAddGPIO(iLEDPin, GPIO_OUT);
+#endif // USE_GENERIC
 
 #ifdef USE_BCM2835
 	bcm2835_gpio_fsel(iDCPin, BCM2835_GPIO_FSEL_OUTP);
@@ -601,12 +611,12 @@ int spilcdConfigurePin(int iPin)
 {
 int iGPIO;
 
-#if defined( USE_NANOPI2 ) || defined( USE_NANOPIK2 )
-	iGPIO = ucNanoPins[iPin];
+#ifdef USE_GENERIC
+	iGPIO = ucGenericPins[iPin];
 	if (iGPIO == 0xff) // invalid pin number
 		return -1;
-	NanoAddGPIO(iGPIO, GPIO_IN);
-#endif // USE_NANOPI2
+	GenericAddGPIO(iGPIO, GPIO_IN);
+#endif // USE_GENERIC
 
 #ifdef USE_BCM2835
         iGPIO = ucBCM2835Pins[iPin];
@@ -639,19 +649,19 @@ int spilcdReadPin(int iPin)
 {
 int iGPIO;
 
-#if defined( USE_NANOPI2 ) || defined (USE_NANOPIK2) 
+#ifdef USE_GENERIC
 {
 char szTemp[64];
 int file_gpio;
 
-	iGPIO = ucNanoPins[iPin];
+	iGPIO = ucGenericPins[iPin];
 	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iGPIO);
 	file_gpio = open(szTemp, O_RDONLY);
 	read(file_gpio, szTemp, 1);
 	close(file_gpio);
 	return (szTemp[0] == '1');
 }
-#endif // USE_NANOPI2
+#endif // USE_GENERIC
 
 #ifdef USE_PIGPIO
         iGPIO = ucPIGPins[iPin];
@@ -813,9 +823,12 @@ void spilcdShutdown(void)
 	if (file_spi >= 0)
 	{
 		spilcdWriteCommand(0x29); // Display OFF
-#if defined ( USE_NANOPI2 ) || defined (USE_NANOPIK2)
+#ifdef USE_GENERIC
 	close(file_spi);
-#endif // USE_NANOPI2
+	GenericRemoveGPIO(iDCPin);
+	GenericRemoveGPIO(iResetPin);
+	GenericRemoveGPIO(iLEDPin);
+#endif // USE_GENERIC
 
 #ifdef USE_PIGPIO
 		spiClose(file_spi);
@@ -1482,12 +1495,13 @@ int spilcdSetOrientation(int iOrient)
 int spilcdFill(unsigned short usData)
 {
 int y;
-unsigned short usC, temp[320];
+uint32_t usC, temp[1024];
 int iOldOrient;
 
 	if (file_spi < 0) return -1; // not initialized
 
 	usC = (usData >> 8) | ((usData & 0xff)<<8); // swap endian-ness
+	usC |= (usC << 16);
 	// make sure we're in landscape mode to use the correct coordinates
 	iOldOrient = iOrientation;
 	iOrientation = LCD_ORIENTATION_PORTRAIT;
@@ -1495,11 +1509,11 @@ int iOldOrient;
 	spilcdSetPosition(0,0,iWidth,iHeight);
 	iOrientation = iOldOrient;
 
-	for (y=0; y<iWidth; y++)
+	for (y=0; y<iWidth*2; y++)
            temp[y] = usC;
-	for (y=0; y<iHeight; y++)
+	for (y=0; y<iHeight/4; y++)
 	{
-		spilcdWriteDataBlock((unsigned char *)temp, iWidth*2); // fill with data byte
+		spilcdWriteDataBlock((unsigned char *)temp, iWidth*4*2); // fill with data byte
 	} // for y
 	return 0;
 } /* spilcdFill() */
