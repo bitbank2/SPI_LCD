@@ -74,7 +74,7 @@ int i, x, y;
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0
 	// Pass it the GPIO pin numbers used for the following:
-	rc = spilcdInit(LCD, 0, 1, 42000000, 11, 7, 13); // SPI Channel, D/C, RST, LED
+	rc = spilcdInit(LCD, 0, 1, 48000000, 11, 7, 13); // SPI Channel, D/C, RST, LED
 	if (rc != 0)
 	{
 		printf("Problem initializing spilcd library\n");
@@ -113,7 +113,7 @@ int i, x, y;
     spilcdScrollReset();
     // Draw some rectangles
     iTime = MilliTime();
-    for (rc=0; rc<10000; rc++)
+    for (rc=0; rc<2000; rc++)
     {
        unsigned short usColor;
        int w, h, bFill;
@@ -126,10 +126,11 @@ int i, x, y;
        spilcdRectangle(x, y, w, h, usColor, bFill);
     }
     iTime = MilliTime() - iTime;
-    printf("10000 random rectangles in %d ms\n", iTime);
+    printf("2000 random rectangles in %d ms\n", iTime);
     usleep(3000000);
 
     spilcdSetOrientation(LCD_ORIENTATION_PORTRAIT);
+    spilcdFill(0);
     // Draw scrolling 8x8 text with various background/foreground colors
 	for (rc=0; rc<height; rc++)
 	{

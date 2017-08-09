@@ -53,7 +53,7 @@
 #ifdef USE_GENERIC
 #include <linux/spi/spidev.h>
 static struct spi_ioc_transfer xfer;
-static unsigned char ucRXBuf[1024];
+static unsigned char ucRXBuf[4096];
 #define GPIO_OUT 0
 #define GPIO_IN 1
 
@@ -1346,6 +1346,86 @@ int spilcdSetPixel(int x, int y, unsigned short usColor)
 	return 0;
 } /* spilcdSetPixel() */
 
+//
+// Draw a string of small (8x8) text as quickly as possible
+// by writing it to the LCD in a single SPI write
+// The string must be 32 characters or shorter
+//
+int spilcdWriteStringFast(int x, int y, char *szMsg, unsigned short usFGColor, unsigned short usBGColor)
+{
+int i, j, k, iMaxLen, iLen;
+int iChars, iStride;
+unsigned char *s;
+unsigned short usFG = (usFGColor >> 8) | ((usFGColor & 0xff)<< 8);
+unsigned short usBG = (usBGColor >> 8) | ((usBGColor & 0xff)<< 8);
+unsigned short *usD;
+
+
+        if (file_spi < 0) return -1; // not initialized
+
+        iLen = strlen(szMsg);
+	if (iLen <=0) return -1; // can't use this function
+        iMaxLen = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iWidth : iHeight;
+
+                if ((8*iLen) + x > iMaxLen) iLen = (iMaxLen - x)/8; // can't display it all
+		if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // draw rotated
+                {
+			iChars = 0;
+			for (i=0; i<iLen; i++)
+                        {
+				s = &ucFont[(unsigned char)szMsg[i] * 8];
+				usD = (unsigned short *)&ucRXBuf[iChars*128];
+                                for (k=0; k<8; k++) // for each scanline
+                                {
+                                        for (j=0; j<8; j++)
+                                        {
+                                                if (s[7-j] & (0x80 >> k))
+                                                        *usD++ = usFG;
+                                                else
+                                                        *usD++ = usBG;
+                                        } // for j
+                                } // for k
+				iChars++;
+				if (iChars == 32) // need to write it
+				{
+					spilcdSetPosition(x, y, 8*iChars, 8);
+					spilcdWriteDataBlock(ucRXBuf, iChars*128);
+					x += iChars*8;
+					iChars = 0;
+				}
+                        } // for i
+			if (iChars)
+			{
+				spilcdSetPosition(x, y, 8*iChars, 8);
+                                spilcdWriteDataBlock(ucRXBuf, iChars*128);
+			}
+		} // landscape
+                else // portrait orientation
+                {
+			if (iLen > 32) iLen = 32;
+			iStride = iLen * 16;
+			for (i=0; i<iLen; i++)
+			{
+				s = &ucFont[(unsigned char)szMsg[i] * 8];
+                                for (k=0; k<8; k++) // for each scanline
+                                {
+					usD = (unsigned short *)&ucRXBuf[(k*iStride) + (i * 16)];
+                                        for (j=0; j<8; j++)
+                                        {
+                                                if (s[0] & (0x80>>j))
+                                                        *usD++ = usFG;
+                                                else
+                                                        *usD++ = usBG;
+                                        } // for j
+                                        s++;
+                                } // for k
+                        } // normal orientation
+                // write the data in one shot
+		spilcdSetPosition(x, y, 8*iLen, 8);
+                spilcdWriteDataBlock(ucRXBuf, iLen*128);
+                } // portrait orientation
+	return 0;
+} /* spilcdWriteStringFast() */
 //
 // Draw a string of small (8x8) or large (16x32) characters
 // At the given col+row

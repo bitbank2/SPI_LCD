@@ -95,6 +95,12 @@ int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch);
 // bLarge = 0 - 8x8 font, bLarge = 1 - 16x24 font
 int spilcdWriteString(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor, int bLarge);
 
+// Write a text string of 8x8 characters
+// quickly to the LCD with a single data block write.
+// This is necessary because there is a lot of latency between
+// writes when using the spidev kernel driver
+int spilcdWriteStringFast(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor);
+
 // Sets a pixel to the given color
 // Coordinate system is pixels, not text rows (0-239, 0-319)
 int spilcdSetPixel(int x, int y, unsigned short usPixel);
