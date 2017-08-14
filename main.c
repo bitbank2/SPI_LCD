@@ -53,9 +53,10 @@ int main(int argc, char* argv[])
 {
 int rc;
 int iTime;
-int i, x, y;
+int x, y;
 
 #ifdef TEST_TOUCH_CONTROLLER
+int i;
 
 	spilcdInitTouch(TOUCH_XPT2046, 1, 50000);
 	spilcdTouchCalibration(149, 1949, 58, 1949);
@@ -89,7 +90,7 @@ int i, x, y;
 		{
 			for (y=0; y<=width-16; y+= 16)
 			{
-				spilcdDrawTile(height/2, y, (unsigned char *)usColors, 0);
+				spilcdDrawTile(height/2, y, 16, 16, (unsigned char *)usColors, 0);
 			}
 		}
 		spilcdScroll(1, -1);

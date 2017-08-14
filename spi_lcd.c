@@ -250,13 +250,16 @@ static void myspiWrite(unsigned char *pBuf, int iLen)
 static void myPinWrite(int iPin, int iValue)
 {
 #ifdef USE_GENERIC
-int file_gpio;
+int file_gpio, rc;
 char szTemp[64];
 	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iPin);
 	file_gpio = open(szTemp, O_WRONLY);
-	if (iValue) write(file_gpio, "1", 1);
-	else write(file_gpio, "0", 1);
+	if (iValue) rc = write(file_gpio, "1", 1);
+	else rc = write(file_gpio, "0", 1);
 	close(file_gpio);
+	if (rc < 0) // error
+	{ // do something
+	}
 #endif // USE_GENERIC
 
 #ifdef USE_BCM2835
@@ -290,6 +293,7 @@ int x, y;
 
 	if (pX == NULL || pY == NULL)
 		return -1;
+	ucRxBuf[0] = ucRxBuf[1] = ucRxBuf[2] = ucRxBuf[3] = ucRxBuf[4] = ucRxBuf[5] = 0; // suppress compiler warning
 	myspiReadWrite(ucReadX, ucRxBuf, 3);
 	myspiReadWrite(ucReadY, &ucRxBuf[3], 3);
 	x = ((ucRxBuf[2] + (ucRxBuf[1]<<8)) >> 4); // top 12 bits
@@ -375,27 +379,33 @@ unsigned char ucRxBuf[4];
 void GenericAddGPIO(int iPin, int iDirection)
 {
 char szName[64];
-int file_gpio;
+int file_gpio, rc;
 	file_gpio = open("/sys/class/gpio/export", O_WRONLY);
 	sprintf(szName, "%d", iPin);
-	write(file_gpio, szName, strlen(szName));
+	rc = write(file_gpio, szName, strlen(szName));
 	close(file_gpio);
 	sprintf(szName, "/sys/class/gpio/gpio%d/direction", iPin);
 	file_gpio = open(szName, O_WRONLY);
 	if (iDirection == GPIO_OUT)
-		write(file_gpio, "out", 3);
+		rc = write(file_gpio, "out", 3);
 	else
-		write(file_gpio, "in", 2);
+		rc = write(file_gpio, "in", 2);
 	close(file_gpio);
+	if (rc < 0) // added to suppress compiler warnings
+	{ // do nothing
+	}
 } /* GenericAddGPIO() */
 void GenericRemoveGPIO(int iPin)
 {
-int file_gpio;
+int file_gpio, rc;
 char szTemp[64];
 	file_gpio = open("/sys/class/gpio/unexport", O_WRONLY);
 	sprintf(szTemp, "%d", iPin);
-	write(file_gpio, szTemp, strlen(szTemp));
+	rc = write(file_gpio, szTemp, strlen(szTemp));
 	close(file_gpio);
+	if (rc < 0) // suppress compiler warning
+	{ // do nothing
+	}
 } /* GenericRemoveGPIO() */
 #endif // USE_GENERIC
 
@@ -652,12 +662,14 @@ int iGPIO;
 #ifdef USE_GENERIC
 {
 char szTemp[64];
-int file_gpio;
+int file_gpio, rc;
 
 	iGPIO = ucGenericPins[iPin];
 	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iGPIO);
 	file_gpio = open(szTemp, O_RDONLY);
-	read(file_gpio, szTemp, 1);
+	rc = read(file_gpio, szTemp, 1);
+	if (rc < 0) // do nothing
+	{}
 	close(file_gpio);
 	return (szTemp[0] == '1');
 }
@@ -1122,12 +1134,11 @@ uint32_t u32Mask = 0xffff;
 //               |C|C|D|D|
 //               +-+-+-+-+
 //
-// The x/y coordinates will be scaled
+// The x/y coordinates will be scaled 2x in the X direction and 1.5x in the Y
 // It is assumed that the display is set to LANDSCAPE orientation
 //
-int spilcdDrawScaledTile(int x, int y, unsigned char *pTile, int iPitch)
+int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch)
 {
-unsigned char ucTemp[1536];
 int i, j, iPitch32;
 uint16_t *d;
 uint32_t *s;
@@ -1141,14 +1152,14 @@ uint32_t u32Mask = 0xffff;
 	x = x * 2;
 	y = (y * 3)/2;
         iPitch32 = iPitch/4;
-	for (j=0; j<16; j+=2) // 16 source lines (2 at a time)
+	for (j=0; j<cx; j+=2) // source lines (2 at a time)
 	{
 		s = (uint32_t *)&pTile[j * 2];
-		d = (uint16_t *)&ucTemp[j*96];
-		for (i=0; i<16; i+=2) // 16 source columns (2 at a time)
+		d = (uint16_t *)&ucRXBuf[j*cy*6];
+		for (i=0; i<cy; i+=2) // source columns (2 at a time)
 		{
-			u32A = s[(15-i)*iPitch32];
-			u32B = s[(14-i)*iPitch32];
+			u32A = s[(cy-1-i)*iPitch32];
+			u32B = s[(cy-2-i)*iPitch32];
 			u32C = u32A >> 16;
 			u32D = u32B >> 16;
 			u32A &= u32Mask;
@@ -1157,26 +1168,26 @@ uint32_t u32Mask = 0xffff;
 			u32a += ((u32B & u32Magic) >> 1);
 			u32b = (u32C & u32Magic) >> 1;
 			u32b += ((u32D & u32Magic) >> 1);
-			d[0] = d[24] = __builtin_bswap16(u32A); // swap byte order
-			d[1] = d[25] = __builtin_bswap16(u32a);
-			d[2] = d[26] = __builtin_bswap16(u32B);
-			d[48] = d[72] = __builtin_bswap16(u32C);
-			d[49] = d[73] = __builtin_bswap16(u32b);
-			d[50] = d[74] = __builtin_bswap16(u32D);
+			d[0] = d[(cy*3)/2] = __builtin_bswap16(u32A); // swap byte order
+			d[1] = d[((cy*3)/2)+1] = __builtin_bswap16(u32a);
+			d[2] = d[((cy*3)/2)+2] = __builtin_bswap16(u32B);
+			d[cy*3] = d[(cy*9)/2] = __builtin_bswap16(u32C);
+			d[(cy*3)+1] = d[((cy*9)/2)+1] = __builtin_bswap16(u32b);
+			d[(cy*3)+2] = d[((cy*9)/2)+2] = __builtin_bswap16(u32D);
 			d += 3;
 		} // for i
 	} // for j
-        spilcdSetPosition(x, y, 32, 24);
-        if (((x + iScrollOffset) % iHeight) > iHeight-32) // need to write in 2 parts since it won't wrap
+        spilcdSetPosition(x, y, cx*2, (cy*3)/2);
+        if (((x + iScrollOffset) % iHeight) > iHeight-(cx*2)) // need to write in 2 parts since it won't wrap
         {
                 int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
-                spilcdWriteDataBlock(ucTemp, iStart*48); // first N lines
-                spilcdSetPosition(x+iStart, y, 32-iStart, 24);
-                spilcdWriteDataBlock(&ucTemp[iStart*48], 1536-(iStart*48));
+                spilcdWriteDataBlock(ucRXBuf, iStart*cx*3); // first N lines
+                spilcdSetPosition(x+iStart, y, (cx*2)-iStart, (cy*3)/2);
+                spilcdWriteDataBlock(&ucRXBuf[iStart*cx*3], (cx*cy*6)-(iStart*cx*3));
         }
         else // can write in one shot
         {
-                spilcdWriteDataBlock(ucTemp, 1536);
+                spilcdWriteDataBlock(ucRXBuf, cx*cy*6);
         }
 	return 0;
 } /* spilcdDrawScaledTile() */
@@ -1264,7 +1275,7 @@ int iNumCols, iNumRows, iTotalSize;
 //
 // Draw a NxN RGB565 tile
 // This reverses the pixel byte order and sets a memory "window"
-// of 16x16 pixels so that the write can occur in one shot
+// of pixels so that the write can occur in one shot
 //
 int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch)
 {
