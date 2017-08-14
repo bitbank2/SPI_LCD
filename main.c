@@ -75,7 +75,7 @@ int i;
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0
 	// Pass it the GPIO pin numbers used for the following:
-	rc = spilcdInit(LCD, 0, 1, 48000000, 11, 7, 13); // SPI Channel, D/C, RST, LED
+	rc = spilcdInit(LCD, 0, 0, 32000000, 18, 22, 13); // SPI Channel, D/C, RST, LED
 	if (rc != 0)
 	{
 		printf("Problem initializing spilcd library\n");
@@ -138,7 +138,7 @@ int i;
 		spilcdScroll(2, 0);
 		if ((rc & 3) == 0)
 			spilcdWriteString(0, height-8, "This is a test of scrolling text", usColors[(rc>>3)&7], usColors[((rc>>3)+1)&7],0);
-		usleep(33000);
+		usleep(16000);
 	}
 	spilcdWriteString(0, height/2, "Big Text!", usColors[0], usColors[1],1);
 	usleep(2000000);

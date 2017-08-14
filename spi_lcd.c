@@ -22,10 +22,10 @@
 // control lines. 
 
 // Use one of the following 3 libraries for talking to the SPI/GPIO
-//#define USE_PIGPIO
+#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-#define USE_GENERIC
+//#define USE_GENERIC
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 #define USE_ORANGEPIZERO
@@ -53,13 +53,13 @@
 #ifdef USE_GENERIC
 #include <linux/spi/spidev.h>
 static struct spi_ioc_transfer xfer;
-static unsigned char ucRXBuf[4096];
 #define GPIO_OUT 0
 #define GPIO_IN 1
 
 #endif // USE_GENERIC
 
 extern unsigned char ucFont[];
+static unsigned char ucRXBuf[4096];
 static int file_spi = -1; // SPI system handle
 static int file_touch = -1; // SPI handle for touch controller
 static int iTouchChannel, iTouchType;
