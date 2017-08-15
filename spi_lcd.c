@@ -22,10 +22,10 @@
 // control lines. 
 
 // Use one of the following 3 libraries for talking to the SPI/GPIO
-#define USE_PIGPIO
+//#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-//#define USE_GENERIC
+#define USE_GENERIC
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 #define USE_ORANGEPIZERO
@@ -55,7 +55,7 @@
 static struct spi_ioc_transfer xfer;
 #define GPIO_OUT 0
 #define GPIO_IN 1
-
+static int iPinHandles[256]; // keep file handles open for GPIO access
 #endif // USE_GENERIC
 
 extern unsigned char ucFont[];
@@ -250,13 +250,16 @@ static void myspiWrite(unsigned char *pBuf, int iLen)
 static void myPinWrite(int iPin, int iValue)
 {
 #ifdef USE_GENERIC
-int file_gpio, rc;
+int rc;
 char szTemp[64];
-	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iPin);
-	file_gpio = open(szTemp, O_WRONLY);
-	if (iValue) rc = write(file_gpio, "1", 1);
-	else rc = write(file_gpio, "0", 1);
-	close(file_gpio);
+
+	if (iPinHandles[iPin] == -1) // not open yet
+	{
+		sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iPin);
+		iPinHandles[iPin] = open(szTemp, O_WRONLY);
+	}
+	if (iValue) rc = write(iPinHandles[iPin], "1", 1);
+	else rc = write(iPinHandles[iPin], "0", 1);
 	if (rc < 0) // error
 	{ // do something
 	}
@@ -391,6 +394,7 @@ int file_gpio, rc;
 	else
 		rc = write(file_gpio, "in", 2);
 	close(file_gpio);
+	iPinHandles[iPin] = -1;
 	if (rc < 0) // added to suppress compiler warnings
 	{ // do nothing
 	}
@@ -399,6 +403,8 @@ void GenericRemoveGPIO(int iPin)
 {
 int file_gpio, rc;
 char szTemp[64];
+
+	close(iPinHandles[iPin]);
 	file_gpio = open("/sys/class/gpio/unexport", O_WRONLY);
 	sprintf(szTemp, "%d", iPin);
 	rc = write(file_gpio, szTemp, strlen(szTemp));
@@ -662,15 +668,17 @@ int iGPIO;
 #ifdef USE_GENERIC
 {
 char szTemp[64];
-int file_gpio, rc;
+int rc;
 
 	iGPIO = ucGenericPins[iPin];
-	sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iGPIO);
-	file_gpio = open(szTemp, O_RDONLY);
-	rc = read(file_gpio, szTemp, 1);
+	if (iPinHandles[iGPIO] == -1)
+	{
+		sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iGPIO);
+		iPinHandles[iGPIO] = open(szTemp, O_RDONLY);
+	}
+	rc = read(iPinHandles[iGPIO], szTemp, 1);
 	if (rc < 0) // do nothing
 	{}
-	close(file_gpio);
 	return (szTemp[0] == '1');
 }
 #endif // USE_GENERIC

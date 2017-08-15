@@ -1,6 +1,6 @@
 CFLAGS=-c -Wall -O2
-#LIBS= -lspi_lcd -lpthread -lm
-LIBS= -lspi_lcd -lpigpio -lpthread -lm
+LIBS= -lspi_lcd -lpthread -lm
+#LIBS= -lspi_lcd -lpigpio -lpthread -lm
 #LIBS= -lspi_lcd -lwiringPi -lm -lpthread
 #LIBS= -lspi_lcd -lbcm2835 -lm
 

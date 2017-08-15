@@ -14,10 +14,8 @@ management and hardware scrolling.
 Unfortunately the display controller needs a couple of
 control lines (GPIO pins) for Reset and Data/Command; this requires making
 some changes to the code depending on which GPIO lines you choose to use.
-Normally I like to own 100% of the code and not depend on third-party libraries,
-but accessing SPI and GPIO pins efficiently is beyond the scope of this project.
-Therefore, I added the flexibility to use either the wiringPi, BCM2835 or
-PIGPIO libraries to provide SPI/GPIO support. Select the desired library by
+I added the flexibility to use either the SPI/GPIO kernel drivers, or
+wiringPi, BCM2835 or PIGPIO. Select the desired library by
 using the appropriate #ifdef in spi_lcd.c and in the make_sample makefile.
 From my testing, wiringPi is the slowest of the 3 due to its use of the Linux
 SPI kernel driver. The advantage to using it is that it doesn't require root
@@ -32,15 +30,16 @@ per second possible, so you can see how each library performs on your hardware.
 Features
 --------
 - Supports st7735 (128x160), ili9341 (240x320) and hx8357 (320x480) displays
+- Includes several header pin to GPIO translation tables for non-RPI boards
 - Works in both landscape and portrait orientation
 - Two sizes of text drawing with custom fg/bg color
-- Fast 16x16 tile drawing for gaming
-- Fast 32x20 stretched tile drawing for scaling 160x144 to 320x216
+- Fast tile drawing for gaming
+- Fast stretched tile drawing for scaling 160x144 to 320x216
 - Hardware scrolling (vertical/portrait direction only)
 - Single pixel drawing
 - Backlight on/off
 - Portable C code with wrapper functions for I/O; easy to compile on any system
-- GPIO input functions for reading button input without a keyboard driver
+- GPIO wrapper functions for reading/writing in a simple way.
 - xpt2046 touch controller input
 
 To build the library, simply type 'make' in the terminal. To build the sample
