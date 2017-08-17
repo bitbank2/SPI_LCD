@@ -28,7 +28,8 @@
 #define USE_GENERIC
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
-#define USE_ORANGEPIZERO
+//#define USE_ORANGEPIZERO
+#define USE_ORANGEPIONE
 
 #include <unistd.h>
 #include <stdio.h>
@@ -79,11 +80,13 @@ static void spilcdWriteDataBlock(unsigned char *pData, int iLen);
 static void myPinWrite(int iPin, int iValue);
 int spilcdFill(unsigned short usData);
 
+#ifdef USE_ORANGEPIONE
+static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,13,0xff,14,1,110,0,0xff,3,68,0xff,71,64,0xff,65,2,66,67,0xff,21,19,18,7,0xff,8,200,9,0xff,10,201,20,198,0xff,199};
+#endif // ORANGEPIONE
+
 #ifdef USE_ORANGEPIZERO
 static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,198,0xff,199,1,7,0,0xff,3,19,0xff,18,15,0xff,16,2,14,13,0xff,10,0xff,0xff,0xff,0xff,
 0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
-//static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,13,
-//0xff,14,1,110,0,0xff,3,68,0xff,71,64,0xff,65,2,66,67,0xff,21,19,18,7,0xff,8,200,9,0xff,10,201,20,198,0xff,199};
 #endif // ORANGEPIZERO
 #ifdef USE_NANOPI2
 static unsigned char ucGenericPins[] = {0xff,0xff,0xff,99,0xff,98,0xff,32+28,96+21,0xff,96+17,
