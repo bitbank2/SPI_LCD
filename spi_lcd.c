@@ -29,7 +29,8 @@
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 //#define USE_ORANGEPIZERO
-#define USE_ORANGEPIONE
+//#define USE_ORANGEPIONE
+#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
 #include <stdio.h>
@@ -80,45 +81,51 @@ static void spilcdWriteDataBlock(unsigned char *pData, int iLen);
 static void myPinWrite(int iPin, int iValue);
 int spilcdFill(unsigned short usData);
 
+#ifdef USE_ORANGEPIZEROPLUS2
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,0,-1,1,352,107,353,-1,3,
+	19,-1,18,-1,-1,-1,2,14,13,-1,110,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+	-1,-1};
+#endif // USE_ORANGEPIZEROPLUS2
+
 #ifdef USE_ORANGEPIONE
-static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,13,0xff,14,1,110,0,0xff,3,68,0xff,71,64,0xff,65,2,66,67,0xff,21,19,18,7,0xff,8,200,9,0xff,10,201,20,198,0xff,199};
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,13,-1,14,1,110,0,-1,3,68,-1,71,64,-1,65,2,66,67,-1,21,19,18,7,-1,8,200,9,-1,10,201,20,198,-1,199};
 #endif // ORANGEPIONE
 
 #ifdef USE_ORANGEPIZERO
-static unsigned char ucGenericPins[] = {0xff,0xff,0xff,12,0xff,11,0xff,6,198,0xff,199,1,7,0,0xff,3,19,0xff,18,15,0xff,16,2,14,13,0xff,10,0xff,0xff,0xff,0xff,
-0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,198,-1,199,1,7,0,-1,3,19,-1,18,15,-1,16,2,14,13,-1,10,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1};
 #endif // ORANGEPIZERO
 #ifdef USE_NANOPI2
-static unsigned char ucGenericPins[] = {0xff,0xff,0xff,99,0xff,98,0xff,32+28,96+21,0xff,96+17,
-                       32+29,32+26,32+30,0xff,32+31,64+14,0xff,32+27,64+31,0xff,96+0,96+1,64+29,64+30,0xff,64+13,103,102,
-                       64+8,0xff,64+9,64+28,64+10,0xff,64+12,64+7,64+11,162,0xff,163};
+static int iGenericPins[] = {-1,-1,-1,99,-1,98,-1,32+28,96+21,-1,96+17,
+                       32+29,32+26,32+30,-1,32+31,64+14,-1,32+27,64+31,-1,96+0,96+1,64+29,64+30,-1,64+13,103,102,
+                       64+8,-1,64+9,64+28,64+10,-1,64+12,64+7,64+11,162,-1,163};
 
 #endif // USE_NANOPI2
 
 #ifdef USE_NANOPIK2
-static unsigned char ucGenericPins[] = {0xff,0xff,0xff,205,0xff,206,0xff,211,102,0xff,225,212,227,213,0xff,214,226,0xff,215,216,0xff,218,217,220,219,0xff,221,207,208,222,0xff,127,223,155,0xff,252,0xff,0xff,0xff,0xff,0xff};
+static int iGenericPins[] = {-1,-1,-1,205,-1,206,-1,211,102,-1,225,212,227,213,-1,214,226,-1,215,216,-1,218,217,220,219,-1,221,207,208,222,-1,127,223,155,-1,252,-1,-1,-1,-1,-1};
 #endif // USE_NANOPIK2
 
 #ifdef USE_PIGPIO
-static unsigned char ucPIGPins[] = {0xff,0xff,0xff,2,0xff,3,0xff,4,14,0xff,15,
-                       17,18,27,0xff,22,23,0xff,24,10,0xff,9,25,11,8,0xff,7,0,1,
-                       5,0xff,6,12,13,0xff,19,16,26,20,0xff,21};
+static int iPIGPins[] = {-1,-1,-1,2,-1,3,-1,4,14,-1,15,
+                       17,18,27,-1,22,23,-1,24,10,-1,9,25,11,8,-1,7,0,1,
+                       5,-1,6,12,13,-1,19,16,26,20,-1,21};
 #endif // USE_PIGPIO
 
 #ifdef USE_WIRINGPI
-static unsigned char ucWPPins[] = {0xff,0xff,0xff,8,0xff,9,0xff,7,15,0xff,16,0,1,
-        2,0xff,3,4,0xff,5,12,0xff,13,6,14,10,0xff,11,30,31,21,0xff,22,26,23,0xff,24,27,25,28,0xff,29};
+static int iWPPins[] = {-1,-1,-1,8,-1,9,-1,7,15,-1,16,0,1,
+        2,-1,3,4,-1,5,12,-1,13,6,14,10,-1,11,30,31,21,-1,22,26,23,-1,24,27,25,28,-1,29};
 #endif // USE_WIRINGPI
 
 #ifdef USE_BCM2835
-static unsigned char ucBCM2835Pins[] = {0,0,0,RPI_V2_GPIO_P1_03,0,RPI_V2_GPIO_P1_05,0,
-	RPI_V2_GPIO_P1_07, RPI_V2_GPIO_P1_08,0, RPI_V2_GPIO_P1_10, RPI_V2_GPIO_P1_11,
-        RPI_V2_GPIO_P1_12, RPI_V2_GPIO_P1_13, 0, RPI_V2_GPIO_P1_15,RPI_V2_GPIO_P1_16,
-        0, RPI_V2_GPIO_P1_18, RPI_V2_GPIO_P1_19, 0, RPI_V2_GPIO_P1_21, RPI_V2_GPIO_P1_22,
-        RPI_V2_GPIO_P1_23, RPI_V2_GPIO_P1_24, 0, RPI_V2_GPIO_P1_26, 0, 0,
-        RPI_V2_GPIO_P1_29, 0, RPI_V2_GPIO_P1_31, RPI_V2_GPIO_P1_32, RPI_V2_GPIO_P1_33,
-        0, RPI_V2_GPIO_P1_35, RPI_V2_GPIO_P1_36, RPI_V2_GPIO_P1_37, RPI_V2_GPIO_P1_38,
-        0, RPI_V2_GPIO_P1_40};
+static int iBCM2835Pins[] = {-1,-1,-1,RPI_V2_GPIO_P1_03,-1,RPI_V2_GPIO_P1_05,-1,
+	RPI_V2_GPIO_P1_07, RPI_V2_GPIO_P1_08,-1, RPI_V2_GPIO_P1_10, RPI_V2_GPIO_P1_11,
+        RPI_V2_GPIO_P1_12, RPI_V2_GPIO_P1_13, -1, RPI_V2_GPIO_P1_15,RPI_V2_GPIO_P1_16,
+        -1, RPI_V2_GPIO_P1_18, RPI_V2_GPIO_P1_19, -1, RPI_V2_GPIO_P1_21, RPI_V2_GPIO_P1_22,
+        RPI_V2_GPIO_P1_23, RPI_V2_GPIO_P1_24, -1, RPI_V2_GPIO_P1_26, -1, -1,
+        RPI_V2_GPIO_P1_29, -1, RPI_V2_GPIO_P1_31, RPI_V2_GPIO_P1_32, RPI_V2_GPIO_P1_33,
+        -1, RPI_V2_GPIO_P1_35, RPI_V2_GPIO_P1_36, RPI_V2_GPIO_P1_37, RPI_V2_GPIO_P1_38,
+        -1, RPI_V2_GPIO_P1_40};
 #endif // BCM2835
 
 //
@@ -435,10 +442,10 @@ int i, iCount;
 	iScrollOffset = 0; // current hardware scroll register value
 
 #ifdef USE_BCM2835
-     iDCPin = ucBCM2835Pins[iDC]; // use the pin numbers as-is
-     iResetPin = ucBCM2835Pins[iReset];
-     iLEDPin = ucBCM2835Pins[iLED];
-     if (iDCPin == 0 || iResetPin == 0 || iLEDPin == 0)
+     iDCPin = iBCM2835Pins[iDC]; // use the pin numbers as-is
+     iResetPin = iBCM2835Pins[iReset];
+     iLEDPin = iBCM2835Pins[iLED];
+     if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
      {
         printf("One or more invalid GPIO Pin numbers\n");
         return -1;
@@ -464,10 +471,10 @@ int i, iCount;
 #endif // USE_BCM2835
 
 #ifdef USE_PIGPIO
-	iDCPin = ucPIGPins[iDC];
-	iResetPin = ucPIGPins[iReset];
-	iLEDPin = ucPIGPins[iLED];
-	if (iDCPin == 0xff || iResetPin == 0xff || iLEDPin == 0xff)
+	iDCPin = iPIGPins[iDC];
+	iResetPin = iPIGPins[iReset];
+	iLEDPin = iPIGPins[iLED];
+	if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
@@ -478,10 +485,10 @@ int i, iCount;
 #endif // USE_PIGPIO
 
 #ifdef USE_GENERIC
-	iDCPin = ucGenericPins[iDC];
-	iResetPin = ucGenericPins[iReset];
-	iLEDPin = ucGenericPins[iLED];
-	if (iDCPin == 0xff || iResetPin == 0xff || iLEDPin == 0xff)
+	iDCPin = iGenericPins[iDC];
+	iResetPin = iGenericPins[iReset];
+	iLEDPin = iGenericPins[iLED];
+	if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
@@ -503,11 +510,11 @@ int i, iCount;
 #endif // USE_GENERIC
 
 #ifdef USE_WIRINGPI
-	iDCPin = ucWPPins[iDC];
-	iResetPin = ucWPPins[iReset];
-	iLEDPin = ucWPPins[iLED];
+	iDCPin = iWPPins[iDC];
+	iResetPin = iWPPins[iReset];
+	iLEDPin = iWPPins[iLED];
 
-	if (iDCPin == 0xff || iResetPin == 0xff || iLEDPin == 0xff)
+	if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
@@ -631,30 +638,30 @@ int spilcdConfigurePin(int iPin)
 int iGPIO;
 
 #ifdef USE_GENERIC
-	iGPIO = ucGenericPins[iPin];
-	if (iGPIO == 0xff) // invalid pin number
+	iGPIO = iGenericPins[iPin];
+	if (iGPIO == -1) // invalid pin number
 		return -1;
 	GenericAddGPIO(iGPIO, GPIO_IN);
 #endif // USE_GENERIC
 
 #ifdef USE_BCM2835
-        iGPIO = ucBCM2835Pins[iPin];
+        iGPIO = iBCM2835Pins[iPin];
         if (iGPIO == 0) // invalid pin number
                 return -1;
         bcm2835_gpio_fsel(iGPIO, BCM2835_GPIO_FSEL_INPT);
         bcm2835_gpio_set_pud(iGPIO,  BCM2835_GPIO_PUD_UP);
 #endif
 #ifdef USE_PIGPIO
-        iGPIO = ucPIGPins[iPin];
-        if (iGPIO == 0xff) // invalid pin
+        iGPIO = iPIGPins[iPin];
+        if (iGPIO == -1) // invalid pin
                 return -1;
         gpioSetMode(iGPIO, PI_INPUT);
         gpioSetPullUpDown(iGPIO, PI_PUD_UP);
 #endif
 
 #ifdef USE_WIRINGPI
-        iGPIO = ucWPPins[iPin];
-        if (iGPIO == 0xff) // invalid
+        iGPIO = iWPPins[iPin];
+        if (iGPIO == -1) // invalid
                 return -1;
         pinMode(iGPIO, INPUT);
         pullUpDnControl(iGPIO, PUD_UP);
@@ -673,7 +680,7 @@ int iGPIO;
 char szTemp[64];
 int rc;
 
-	iGPIO = ucGenericPins[iPin];
+	iGPIO = iGenericPins[iPin];
 	if (iPinHandles[iGPIO] == -1)
 	{
 		sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iGPIO);
@@ -687,15 +694,15 @@ int rc;
 #endif // USE_GENERIC
 
 #ifdef USE_PIGPIO
-        iGPIO = ucPIGPins[iPin];
+        iGPIO = iPIGPins[iPin];
         return gpioRead(iGPIO);
 #endif // USE_PIGPIO
 #ifdef USE_WIRINGPI
-        iGPIO = ucWPPins[iPin];
+        iGPIO = iWPPins[iPin];
         return (digitalRead(iGPIO) == HIGH);
 #endif // USE_WIRINGPI
 #ifdef USE_BCM2835
-        iGPIO = ucBCM2835Pins[iPin];
+        iGPIO = iBCM2835Pins[iPin];
         return (bcm2835_gpio_lev(iGPIO) == HIGH);
 #endif // USE_BCM2835
 } /* spilcdReadPin() */
@@ -730,7 +737,7 @@ void spilcdScroll(int iLines, int iFillColor)
 	else
 	{
 		spilcdWriteData16(iScrollOffset >> 8);
-		spilcdWriteData16(iScrollOffset & 0xff);
+		spilcdWriteData16(iScrollOffset & -1);
 	}
 	if (iFillColor != -1) // fill the exposed lines
 	{
@@ -739,7 +746,7 @@ void spilcdScroll(int iLines, int iFillColor)
 	uint32_t *d;
 	uint32_t u32Fill;
 		// quickly prepare a full line's worth of the color
-		u32Fill = (iFillColor >> 8) | ((iFillColor & 0xff) << 8);
+		u32Fill = (iFillColor >> 8) | ((iFillColor & -1) << 8);
 		u32Fill |= (u32Fill << 16);
 		d = (uint32_t *)&usTemp[0];
 		for (i=0; i<iWidth/2; i++)
@@ -775,7 +782,7 @@ int i, ty, th, iPerLine, iStart;
 	if (y < 0 || y >= iCurrentHeight || y+h > iCurrentHeight)
 		return;
 	u32Color = usColor >> 8;
-	u32Color |= (usColor & 0xff) << 8;
+	u32Color |= (usColor & -1) << 8;
 	u32Color |= (u32Color << 16);
 	pu32 = (uint32_t *)&ucTemp[0];
 	for (i=0; i<240; i++) // prepare big buffer of color
@@ -1379,8 +1386,8 @@ int spilcdWriteStringFast(int x, int y, char *szMsg, unsigned short usFGColor, u
 int i, j, k, iMaxLen, iLen;
 int iChars, iStride;
 unsigned char *s;
-unsigned short usFG = (usFGColor >> 8) | ((usFGColor & 0xff)<< 8);
-unsigned short usBG = (usBGColor >> 8) | ((usBGColor & 0xff)<< 8);
+unsigned short usFG = (usFGColor >> 8) | ((usFGColor & -1)<< 8);
+unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 unsigned short *usD;
 
 
@@ -1457,8 +1464,8 @@ int spilcdWriteString(int x, int y, char *szMsg, unsigned short usFGColor, unsig
 {
 int i, j, k, iMaxLen, iLen;
 unsigned char *s;
-unsigned short usFG = (usFGColor >> 8) | ((usFGColor & 0xff)<< 8);
-unsigned short usBG = (usBGColor >> 8) | ((usBGColor & 0xff)<< 8);
+unsigned short usFG = (usFGColor >> 8) | ((usFGColor & -1)<< 8);
+unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 
 
 	if (file_spi < 0) return -1; // not initialized
@@ -1603,7 +1610,7 @@ int iOldOrient;
 
 	if (file_spi < 0) return -1; // not initialized
 
-	usC = (usData >> 8) | ((usData & 0xff)<<8); // swap endian-ness
+	usC = (usData >> 8) | ((usData & -1)<<8); // swap endian-ness
 	usC |= (usC << 16);
 	// make sure we're in landscape mode to use the correct coordinates
 	iOldOrient = iOrientation;
