@@ -83,7 +83,7 @@ int spilcdFill(unsigned short usData);
 
 #ifdef USE_ORANGEPIZEROPLUS2
 static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,0,-1,1,352,107,353,-1,3,
-	19,-1,18,-1,-1,-1,2,14,13,-1,110,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+	19,-1,18,-1,-1,-1,2,14,13,-1,110,-1,5,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 	-1,-1};
 #endif // USE_ORANGEPIZEROPLUS2
 
