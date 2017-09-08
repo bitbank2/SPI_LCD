@@ -28,9 +28,9 @@
 #define USE_GENERIC
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
-//#define USE_ORANGEPIZERO
+#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
-#define USE_ORANGEPIZEROPLUS2
+//#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
 #include <stdio.h>
@@ -92,7 +92,7 @@ static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,13,-1,14,1,110,0,-1,3,68,-1,
 #endif // ORANGEPIONE
 
 #ifdef USE_ORANGEPIZERO
-static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,198,-1,199,1,7,0,-1,3,19,-1,18,15,-1,16,2,14,13,-1,10,-1,-1,-1,-1,
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,198,-1,199,1,7,0,-1,3,19,-1,18,15,-1,16,2,14,13,-1,10,-1,5,4,-1,
 -1,-1,-1,-1,-1,-1,-1,-1};
 #endif // ORANGEPIZERO
 #ifdef USE_NANOPI2
