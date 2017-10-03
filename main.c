@@ -75,7 +75,7 @@ int i;
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0
 	// Pass it the GPIO pin numbers used for the following:
-	rc = spilcdInit(LCD, 0, 1, 46000000, 1, 3, 7); // LCD type, flip 180, SPI Channel, D/C, RST, LED
+	rc = spilcdInit(LCD, 0, 1, 46000000, 18, 22, 13); // LCD type, flip 180, SPI Channel, D/C, RST, LED
 	if (rc != 0)
 	{
 		printf("Problem initializing spilcd library\n");

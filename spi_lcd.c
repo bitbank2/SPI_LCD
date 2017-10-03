@@ -28,8 +28,8 @@
 #define USE_GENERIC
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
-#define USE_NANOPIDUO
-//#define USE_ORANGEPIZERO
+//#define USE_NANOPIDUO
+#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
 //#define USE_ORANGEPIZEROPLUS2
 
@@ -102,7 +102,7 @@ static int iGenericPins[] = {-1,5,-1,4,-1,-1,-1,11,
 			-1,12,363,13,203,14,-1,16,
 			-1,15,-1,199,-1,198,-1,-1,
 			-1,-1,-1,-1,-1,-1,-1,-1,
-			-1,-1,-1,-1,-1,-1,-1,-1,-1};
+			-1,355,-1,-1,-1,-1,-1,-1,-1};
 #endif // USE_NANOPIDUO
 
 #ifdef USE_NANOPI2
@@ -505,15 +505,18 @@ int i, iCount;
 	}
 	{
 	char szName[32];
-	int iSPIMode = 0;
+	int rc, iSPIMode = SPI_MODE_0;
 	int i = iSPIFreq;
 	sprintf(szName,"/dev/spidev%d.0", iChannel);
 	file_spi = open(szName, O_RDWR);
-	ioctl(file_spi, SPI_IOC_WR_MODE, &iSPIMode);
-	ioctl(file_spi, SPI_IOC_WR_MAX_SPEED_HZ, &i);
+	rc = ioctl(file_spi, SPI_IOC_WR_MODE, &iSPIMode);
+	if (rc < 0) printf("Error setting SPI mode\n");
+	rc = ioctl(file_spi, SPI_IOC_WR_MAX_SPEED_HZ, &i);
+	if (rc < 0) printf("Error setting SPI speed\n");
 	memset(&xfer, 0, sizeof(xfer));
 	xfer.speed_hz = iSPIFreq;
-	xfer.cs_change = 1;
+	xfer.cs_change = 0;
+	xfer.delay_usecs = 0;
 	xfer.bits_per_word = 8;
 	xfer.rx_buf = (unsigned long)ucRXBuf; // dummy receive buffer
 	}
