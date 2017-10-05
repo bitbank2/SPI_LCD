@@ -62,7 +62,7 @@ static int iPinHandles[256]; // keep file handles open for GPIO access
 #endif // USE_GENERIC
 
 extern unsigned char ucFont[];
-static unsigned char ucRXBuf[4096], ucRXBuf2[4096];
+static unsigned char ucRXBuf[4096]; //, ucRXBuf2[4096];
 static int file_spi = -1; // SPI system handle
 static int file_touch = -1; // SPI handle for touch controller
 static int iTouchChannel, iTouchType;
@@ -518,7 +518,7 @@ int i, iCount;
 	xfer.cs_change = 0;
 	xfer.delay_usecs = 0;
 	xfer.bits_per_word = 8;
-	xfer.rx_buf = (unsigned long)ucRXBuf2; // dummy receive buffer
+//	xfer.rx_buf = (unsigned long)ucRXBuf2; // dummy receive buffer
 	}
 #endif // USE_GENERIC
 
