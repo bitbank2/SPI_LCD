@@ -1311,6 +1311,7 @@ int iNumCols, iNumRows, iTotalSize;
 int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch)
 {
 int i, j;
+uint32_t ul32;
 unsigned char *s, *d;
 
 	if (file_spi < 0) return -1;
@@ -1324,11 +1325,15 @@ unsigned char *s, *d;
         	for (j=0; j<iTileWidth; j++)
         	{
                 	s = &pTile[j*2];
-                	for (i=0; i<iTileHeight; i++)
+			s += (iTileHeight-2)*iPitch; 
+                	for (i=0; i<iTileHeight; i+=2)
                 	{
-                        	d[1] = s[(iTileHeight-1-i)*iPitch];
-                        	d[0] = s[((iTileHeight-1-i)*iPitch)+1]; // swap byte order (MSB first)
-                        	d += 2;
+				// combine the 2 pixels into a single write for better memory performance
+                        	ul32 = __builtin_bswap16(*(uint16_t *)&s[iPitch]);
+                        	ul32 |= (__builtin_bswap16(*(uint16_t *)s) << 16); // swap byte order (MSB first)
+				*(uint32_t *)d = ul32;
+                        	d += 4;
+				s -= iPitch*2;
                 	} // for i;
         	} // for j
         	spilcdSetPosition(x, y, iTileWidth, iTileHeight);
