@@ -19,6 +19,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+typedef enum
+{
+ MODE_DATA = 0,
+ MODE_COMMAND
+} DC_MODE;
+
+// Sets the D/C pin to data or command mode
+void spilcdSetMode(int iMode);
+
 // Initialize the library
 int spilcdInit(int iLCDType, int bFlipped, int iSPIChannel, int iSPIFreq, int iDCPin, int iResetPin, int iLEDPin);
 

@@ -138,20 +138,6 @@ static int iBCM2835Pins[] = {-1,-1,-1,RPI_V2_GPIO_P1_03,-1,RPI_V2_GPIO_P1_05,-1,
         -1, RPI_V2_GPIO_P1_40};
 #endif // BCM2835
 
-//
-// Default SPI transmission frequency
-// 32Mhz seems to be the maximum that the RPi can handle
-// I've seen others claim that the ILI9341 is capable of
-// faster speeds, but it doesn't appear to work at 62Mhz
-// On the Raspberry Pi
-//
-
-typedef enum
-{
- MODE_DATA = 0,
- MODE_COMMAND
-} DC_MODE;
-
 // Sets the D/C pin to data or command mode
 void spilcdSetMode(int iMode)
 {
