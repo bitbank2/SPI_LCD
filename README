@@ -11,6 +11,8 @@ my interest in retro gaming and my desire to get games to run at 60fps
 through an interface that only allows up to 33fps via smart buffer
 management and hardware scrolling.
 
+![ILI9341 at 60FPS](https://www.youtube.com/watch?v=tKnL1sJpcNo)
+
 Unfortunately the display controller needs a couple of
 control lines (GPIO pins) for Reset and Data/Command; this requires making
 some changes to the code depending on which GPIO lines you choose to use.
