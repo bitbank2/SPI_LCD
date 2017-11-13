@@ -14,5 +14,5 @@ spi_lcd.o: spi_lcd.c
 	$(CC) $(CFLAGS) spi_lcd.c
 
 clean:
-	rm -rf *o libspi_lcd.a
+	rm *.o libspi_lcd.a
 

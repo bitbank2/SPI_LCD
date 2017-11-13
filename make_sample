@@ -13,5 +13,5 @@ main.o: main.c
 	$(CC) $(CFLAGS) main.c
 
 clean:
-	rm -rf *o lcd
+	rm *.o lcd
 
