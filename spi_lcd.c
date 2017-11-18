@@ -29,9 +29,10 @@
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 //#define USE_NANOPIDUO
+#define USE_NANOPINEO
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
-#define USE_ORANGEPIZEROPLUS2
+//#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
 #include <stdio.h>
@@ -116,6 +117,16 @@ static int iGenericPins[] = {-1,-1,-1,99,-1,98,-1,32+28,96+21,-1,96+17,
 static int iGenericPins[] = {-1,-1,-1,205,-1,206,-1,211,102,-1,225,212,227,213,-1,214,226,-1,215,216,-1,218,217,220,219,-1,221,207,208,222,-1,127,223,155,-1,252,-1,-1,-1,-1,-1};
 #endif // USE_NANOPIK2
 
+#ifdef USE_NANOPINEO
+// NanoPi NEO
+// define 40 pins since the 12 pin header has 2 GPIOs available and so does
+// the 4-pin TTY header
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,203,198,-1,
+                        199,0,6,2,-1,3,200,-1,201,64,
+                        -1,65,1,66,67,-1,-1,-1,-1,-1,
+                        363,17,-1,-1,-1,-1,-1,-1,-1,4,
+                        5};
+#endif // USE_NANOPINEO
 #ifdef USE_PIGPIO
 static int iPIGPins[] = {-1,-1,-1,2,-1,3,-1,4,14,-1,15,
                        17,18,27,-1,22,23,-1,24,10,-1,9,25,11,8,-1,7,0,1,
