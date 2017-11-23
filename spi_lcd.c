@@ -29,7 +29,8 @@
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 //#define USE_NANOPIDUO
-#define USE_NANOPINEO
+//#define USE_NANOPINEO
+#define USE_RPI
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
 //#define USE_ORANGEPIZEROPLUS2
@@ -82,6 +83,15 @@ static void spilcdSetPosition(int x, int y, int w, int h);
 static void spilcdWriteDataBlock(unsigned char *pData, int iLen);
 static void myPinWrite(int iPin, int iValue);
 int spilcdFill(unsigned short usData);
+
+// For Raspberry Pi boards, we can use the generic GPIO/SPI access too
+#ifdef USE_RPI
+static int iGenericPins[] = {-1,-1,-1,2,-1,3,-1,4,14,-1,
+			15,17,18,27,-1,22,23,-1,24,10,
+			-1,9,25,11,8,-1,7,0,1,5,
+			-1,6,12,13,-1,19,16,26,20,-1,
+			21};
+#endif // USE_RPI
 
 #ifdef USE_ORANGEPIZEROPLUS2
 static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,0,-1,1,352,107,353,-1,3,
