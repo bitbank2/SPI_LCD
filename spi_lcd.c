@@ -21,16 +21,18 @@
 // and two GPIO pins to control the RESET, and D/C (data/command)
 // control lines. 
 
-// Use one of the following 3 libraries for talking to the SPI/GPIO
-//#define USE_PIGPIO
+// Use one of the following 4 methods for talking to the SPI/GPIO
+#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-#define USE_GENERIC
+//#define USE_GENERIC
+
+// For generic SPI access (kernel drivers), select the board pinout (only one)
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 //#define USE_NANOPIDUO
 //#define USE_NANOPINEO
-#define USE_RPI
+//#define USE_RPI
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
 //#define USE_ORANGEPIZEROPLUS2
@@ -441,6 +443,45 @@ char szTemp[64];
 	}
 } /* GenericRemoveGPIO() */
 #endif // USE_GENERIC
+
+//
+// Choose the gamma curve between 2 choices (0/1)
+// ILI9341 only
+//
+int spilcdSetGamma(int iMode)
+{
+int i;
+unsigned char *sE0, *sE1;
+static unsigned char ucE0_0[] = {0x0F, 0x31, 0x2B, 0x0C, 0x0E, 0x08, 0x4E, 0xF1, 0x37, 0x07, 0x10, 0x03, 0x0E, 0x09, 0x00};
+static unsigned char ucE1_0[] = {0x00, 0x0E, 0x14, 0x03, 0x11, 0x07, 0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F};
+static unsigned char ucE0_1[] = {0x1f, 0x1a, 0x18, 0x0a, 0x0f, 0x06, 0x45, 0x87, 0x32, 0x0a, 0x07, 0x02, 0x07, 0x05, 0x00};
+static unsigned char ucE1_1[] = {0x00, 0x25, 0x27, 0x05, 0x10, 0x09, 0x3a, 0x78, 0x4d, 0x05, 0x18, 0x0d, 0x38, 0x3a, 0x1f};
+
+	if (iMode < 0 || iMode > 1 || iLCDType != LCD_ILI9341)
+		return 1;
+	if (iMode == 0)
+	{
+		sE0 = ucE0_0;
+		sE1 = ucE1_0;
+	}
+	else
+	{
+		sE0 = ucE0_1;
+		sE1 = ucE1_1;
+	}
+	spilcdWriteCommand(0xe0);
+	for(i=0; i<16; i++)
+	{
+		spilcdWriteData8(*sE0++);
+	}
+	spilcdWriteCommand(0xe1);
+	for(i=0; i<16; i++)
+	{
+		spilcdWriteData8(*sE1++);
+	}
+
+	return 0;
+} /* spilcdSetGamme() */
 
 //
 // Initialize the LCD controller and clear the display

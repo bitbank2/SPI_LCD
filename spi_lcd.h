@@ -28,6 +28,12 @@ typedef enum
 // Sets the D/C pin to data or command mode
 void spilcdSetMode(int iMode);
 
+//
+// Choose the gamma curve between 2 choices (0/1)
+// ILI9341 only
+//
+int spilcdSetGamma(int iMode);
+
 // Initialize the library
 int spilcdInit(int iLCDType, int bFlipped, int iSPIChannel, int iSPIFreq, int iDCPin, int iResetPin, int iLEDPin);
 
