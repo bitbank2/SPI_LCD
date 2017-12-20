@@ -31,7 +31,7 @@ per second possible, so you can see how each library performs on your hardware.
 
 Features
 --------
-- Supports st7735 (128x160), ili9341 (240x320) and hx8357 (320x480) displays
+- Supports ssd1351 (128x128), st7735 (128x160), ili9341 (240x320) and hx8357 (320x480) displays
 - Includes several header pin to GPIO translation tables for non-RPI boards
 - Works in both landscape and portrait orientation
 - Two sizes of text drawing with custom fg/bg color

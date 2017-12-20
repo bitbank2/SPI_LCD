@@ -22,10 +22,10 @@
 // control lines. 
 
 // Use one of the following 4 methods for talking to the SPI/GPIO
-#define USE_PIGPIO
+//#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-//#define USE_GENERIC
+#define USE_GENERIC
 
 // For generic SPI access (kernel drivers), select the board pinout (only one)
 //#define USE_NANOPI2
@@ -34,7 +34,7 @@
 //#define USE_NANOPINEO
 //#define USE_RPI
 //#define USE_ORANGEPIZERO
-//#define USE_ORANGEPIONE
+#define USE_ORANGEPIONE
 //#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
@@ -167,6 +167,27 @@ void spilcdSetMode(int iMode)
 	myPinWrite(iDCPin, iMode == MODE_DATA);
 } /* spilcdSetMode() */
 
+// List of command/parameters to initialize the SSD1351 OLED display
+static unsigned char ucOLEDInitList[] = {
+	2, 0xfd, 0x12, // unlock the controller
+	2, 0xfd, 0xb1, // unlock the command
+	1, 0xae,	// display off
+	2, 0xb3, 0xf1,  // clock divider
+	2, 0xca, 0x7f,	// mux ratio
+	2, 0xa0, 0x74,	// set remap
+	3, 0x15, 0x00, 0x7f,	// set column
+	3, 0x75, 0x00, 0x7f,	// set row
+	2, 0xb5, 0x00,	// set GPIO state
+	2, 0xab, 0x01,	// function select (internal diode drop)
+	2, 0xb1, 0x32,	// precharge
+	2, 0xbe, 0x05,	// vcomh
+	1, 0xa6,	// set normal display mode
+	4, 0xc1, 0xc8, 0x80, 0xc8, // contrast ABC
+	2, 0xc7, 0x0f,	// contrast master
+	4, 0xb4, 0xa0,0xb5,0x55,	// set VSL
+	2, 0xb6, 0x01,	// precharge 2
+	1, 0xaf,	// display ON
+	0};
 // List of command/parameters to initialize the ili9341 display
 static unsigned char uc240InitList[] = {
         4, 0xEF, 0x03, 0x80, 0x02,
@@ -491,7 +512,7 @@ int spilcdInit(int iType, int bFlipped, int iChannel, int iSPIFreq, int iDC, int
 unsigned char *s;
 int i, iCount;
 
-	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357 && iType != LCD_SSD1351)
 	{
 		printf("Unsupported display type\n");
 		return -1;
@@ -618,6 +639,9 @@ int i, iCount;
 	usleep(100000);
 	myPinWrite(iResetPin, 1);
 	usleep(200000);
+
+	if (iLCDType != LCD_SSD1351) // no backlight and no soft reset on OLED
+	{
 	myPinWrite(iLEDPin, 1); // turn on the backlight
 
 
@@ -626,15 +650,16 @@ int i, iCount;
 
 	spilcdWriteCommand(0x11);
 	usleep(250000);
-	if (iLCDType == LCD_HX8357)
+	}
+	if (iLCDType == LCD_SSD1351)
 	{
-		spilcdWriteCommand(0xb0);
-		spilcdWriteData16(0x00FF);
-		spilcdWriteData16(0x0001);
-		usleep(100000);
+		s = ucOLEDInitList; // do the commands manually
+
+                iCurrentWidth = iWidth = 128;
+                iCurrentHeight = iHeight = 128;
 	}
     // Send the commands/parameters to initialize the LCD controller
-	if (iLCDType == LCD_ILI9341)
+	else if (iLCDType == LCD_ILI9341)
 	{
 		s = uc240InitList;
 		if (bFlipped)
@@ -646,6 +671,11 @@ int i, iCount;
 	}
 	else if (iLCDType == LCD_HX8357)
 	{
+                spilcdWriteCommand(0xb0);
+                spilcdWriteData16(0x00FF);
+                spilcdWriteData16(0x0001);
+                usleep(100000);
+
 		s = uc480InitList;
 		if (bFlipped)
 			s[65] = 0x88; // flip 180
@@ -664,7 +694,7 @@ int i, iCount;
 		iCurrentWidth = iWidth = 128;
 		iCurrentHeight = iHeight = 160;
 	}
-	iCount  = 1;
+	iCount = 1;
 	while (iCount)
 	{
 		iCount = *s++;
@@ -678,10 +708,13 @@ int i, iCount;
 		}
 	}
 
-	spilcdWriteCommand(0x11); // sleep out
-	usleep(120000);
-	spilcdWriteCommand(0x29); // Display ON
-	usleep(10000);
+	if (iLCDType != LCD_SSD1351)
+	{
+		spilcdWriteCommand(0x11); // sleep out
+		usleep(120000);
+		spilcdWriteCommand(0x29); // Display ON
+		usleep(10000);
+	}
 
 	spilcdFill(0); // erase memory
 
@@ -774,6 +807,12 @@ int rc;
 void spilcdScrollReset(void)
 {
 	iScrollOffset = 0;
+	if (iLCDType == LCD_SSD1351)
+	{
+		spilcdWriteCommand(0xa1); // set scroll start line
+		spilcdWriteData8(0x00);
+		return;
+	}
 	spilcdWriteCommand(0x37); // scroll start address
 	spilcdWriteData16(0);
 	if (iLCDType == LCD_HX8357)
@@ -790,15 +829,24 @@ void spilcdScrollReset(void)
 void spilcdScroll(int iLines, int iFillColor)
 {
 	iScrollOffset = (iScrollOffset + iLines) % iHeight;
-	spilcdWriteCommand(0x37); // Vertical scrolling start address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
+	if (iLCDType == LCD_SSD1351)
 	{
-		spilcdWriteData16(iScrollOffset);
+		spilcdWriteCommand(0xa1); // set scroll start line
+		spilcdWriteData8(iScrollOffset);
+		return;
 	}
 	else
 	{
-		spilcdWriteData16(iScrollOffset >> 8);
-		spilcdWriteData16(iScrollOffset & -1);
+		spilcdWriteCommand(0x37); // Vertical scrolling start address
+		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
+		{
+			spilcdWriteData16(iScrollOffset);
+		}
+		else
+		{
+			spilcdWriteData16(iScrollOffset >> 8);
+			spilcdWriteData16(iScrollOffset & -1);
+		}
 	}
 	if (iFillColor != -1) // fill the exposed lines
 	{
@@ -1010,6 +1058,19 @@ int t;
 	}
 	y = (y + iScrollOffset) % iHeight; // scroll offset affects writing position
 
+	if (iLCDType == LCD_SSD1351) // OLED has very different commands
+	{
+		spilcdWriteCommand(0x15); // set column
+		ucBuf[0] = x;
+		ucBuf[1] = x + w - 1;
+		myspiWrite(ucBuf, 2);
+		spilcdWriteCommand(0x75); // set row
+		ucBuf[0] = y;
+		ucBuf[1] = y + h - 1;
+		myspiWrite(ucBuf, 2);
+		spilcdWriteCommand(0x5c); // write RAM
+		return;
+	}
 	spilcdWriteCommand(0x2a); // set column address
 	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
 	{
