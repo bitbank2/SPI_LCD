@@ -961,7 +961,10 @@ void spilcdShutdown(void)
 {
 	if (file_spi >= 0)
 	{
-		spilcdWriteCommand(0x29); // Display OFF
+		if (iLCDType == LCD_SSD1351)
+			spilcdWriteCommand(0xae); // Display Off
+		else
+			spilcdWriteCommand(0x29); // Display OFF
 #ifdef USE_GENERIC
 	close(file_spi);
 	GenericRemoveGPIO(iDCPin);
