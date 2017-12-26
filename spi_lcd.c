@@ -717,7 +717,7 @@ int i, iCount;
 	}
 
 	spilcdFill(0); // erase memory
-
+	spilcdScrollReset();
 	return 0;
 
 } /* spilcdInit() */
@@ -810,6 +810,8 @@ void spilcdScrollReset(void)
 	if (iLCDType == LCD_SSD1351)
 	{
 		spilcdWriteCommand(0xa1); // set scroll start line
+		spilcdWriteData8(0x00);
+		spilcdWriteCommand(0xa2); // display offset
 		spilcdWriteData8(0x00);
 		return;
 	}
