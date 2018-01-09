@@ -34,7 +34,8 @@
 //#define USE_NANOPINEO
 //#define USE_RPI
 //#define USE_ORANGEPIZERO
-#define USE_ORANGEPIONE
+//#define USE_ORANGEPIONE
+#define USE_BANANAPIM2ZERO
 //#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
@@ -100,6 +101,10 @@ static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,0,-1,1,352,107,353,-1,3,
 	19,-1,18,-1,-1,-1,2,14,13,-1,110,-1,5,4,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 	-1,-1};
 #endif // USE_ORANGEPIZEROPLUS2
+
+#ifdef USE_BANANAPIM2ZERO
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,13,-1,14,1,110,0,-1,3,15,-1,68,64,-1,65,2,66,67,-1,71,19,18,7,-1,8,354,9,-1,10,356,17,21,-1,20};
+#endif // BPI-M2-Zero
 
 #ifdef USE_ORANGEPIONE
 static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,13,-1,14,1,110,0,-1,3,68,-1,71,64,-1,65,2,66,67,-1,21,19,18,7,-1,8,200,9,-1,10,201,20,198,-1,199};
