@@ -50,5 +50,8 @@ that the library is working.
 
 Copyright (c) 2017 by Larry Bank
 Project started 4/25/2017
-bitbank@pobox.com
+bitbank@pobox.com<br>
+
+If you find this code useful, please consider buying me a cup of coffee<br>
+[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=SR4F44J2UR8S4)
 
