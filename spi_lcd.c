@@ -22,20 +22,20 @@
 // control lines. 
 
 // Use one of the following 4 methods for talking to the SPI/GPIO
-//#define USE_PIGPIO
+#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-#define USE_GENERIC
+//#define USE_GENERIC
 
 // For generic SPI access (kernel drivers), select the board pinout (only one)
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 //#define USE_NANOPIDUO
 //#define USE_NANOPINEO
-//#define USE_RPI
+#define USE_RPI
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
-#define USE_BANANAPIM2ZERO
+//#define USE_BANANAPIM2ZERO
 //#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
@@ -217,6 +217,23 @@ static unsigned char uc240InitList[] = {
         16, 0xe1, 0x00, 0x0E, 0x14, 0x03, 0x11, 0x07,
                 0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F, // Set Gamma
         3, 0xb1, 0x00, 0x10, // FrameRate Control 119Hz
+        0
+};
+// List of command/parameters to initialize the ili9342 display
+static unsigned char uc320InitList[] = {
+        2, 0xc0, 0x23, // Power control
+        2, 0xc1, 0x10, // Power control
+        3, 0xc5, 0x3e, 0x28, // VCM control
+        2, 0xc7, 0x86, // VCM control2
+        2, 0x36, 0x08, // Memory Access Control (flip x/y/bgr/rgb)
+        2, 0x3a, 0x55,
+	1, 0x21,	// inverted display off
+//        2, 0x26, 0x01, // Gamma curve selected
+//        16, 0xe0, 0x0F, 0x31, 0x2B, 0x0C, 0x0E, 0x08,
+//                0x4E, 0xF1, 0x37, 0x07, 0x10, 0x03, 0x0E, 0x09, 0x00, // Set Gamma
+//        16, 0xe1, 0x00, 0x0E, 0x14, 0x03, 0x11, 0x07,
+//                0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F, // Set Gamma
+//        3, 0xb1, 0x00, 0x10, // FrameRate Control 119Hz
         0
 };
 
@@ -517,7 +534,7 @@ int spilcdInit(int iType, int bFlipped, int iChannel, int iSPIFreq, int iDC, int
 unsigned char *s;
 int i, iCount;
 
-	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357 && iType != LCD_SSD1351)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342)
 	{
 		printf("Unsupported display type\n");
 		return -1;
@@ -673,6 +690,16 @@ int i, iCount;
 			s[50] = 0x48; // normal orientation
 		iCurrentWidth = iWidth = 240;
 		iCurrentHeight = iHeight = 320;
+	}
+	else if (iLCDType == LCD_ILI9342)
+	{
+		s = uc320InitList;
+		if (bFlipped)
+			s[15] = 0xc8; // flip 180
+		else
+			s[15] = 0x08; // normal orientation
+		iCurrentWidth = iWidth = 320;
+		iCurrentHeight = iHeight = 240;
 	}
 	else if (iLCDType == LCD_HX8357)
 	{
@@ -845,7 +872,7 @@ void spilcdScroll(int iLines, int iFillColor)
 	else
 	{
 		spilcdWriteCommand(0x37); // Vertical scrolling start address
-		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
+		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735)
 		{
 			spilcdWriteData16(iScrollOffset);
 		}
@@ -1082,7 +1109,7 @@ int t;
 		return;
 	}
 	spilcdWriteCommand(0x2a); // set column address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735)
 	{
 		ucBuf[0] = (unsigned char)(x >> 8);
 		ucBuf[1] = (unsigned char)x;
@@ -1108,7 +1135,7 @@ int t;
 		myspiWrite(ucBuf, 8); 
 	}
 	spilcdWriteCommand(0x2b); // set row address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ST7735)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735)
 	{
 		ucBuf[0] = (unsigned char)(y >> 8);
 		ucBuf[1] = (unsigned char)y;

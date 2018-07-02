@@ -135,6 +135,7 @@ int spilcdSetOrientation(int iOrientation);
 #define LCD_HX8357 2
 #define LCD_ST7735 3
 #define LCD_SSD1351 4
+#define LCD_ILI9342 5
 
 // touch panel types
 #define TOUCH_XPT2046 1
