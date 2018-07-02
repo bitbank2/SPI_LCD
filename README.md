@@ -1,7 +1,7 @@
 *** SPI_LCD ***
 
 SPI_LCD is a C library for working with the SPI-connected LCD
-displays which use the ST7735, ILI9341 or HX8357 controller chips. The idea is to
+displays which use the SSD1351, ST7735, ILI9341 or HX8357 controller chips. The idea is to
 provide a simple interface for C programmers to make use of
 those low-cost LCD displays without having to read the data sheet or figure
 out SPI programming. My main purpose of writing this library is not to
