@@ -81,7 +81,7 @@ int i;
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0
 	// Pass it the GPIO pin numbers used for the following:
-	rc = spilcdInit(LCD, 0, 0, 31250000, 13, 11, 18); // LCD type, flip 180, SPI Channel, D/C, RST, LED
+	rc = spilcdInit(LCD, 0, 0, 50000000, 13, 11, 18); // LCD type, flip 180, SPI Channel, D/C, RST, LED
 	if (rc != 0)
 	{
 		printf("Problem initializing spilcd library\n");
@@ -89,7 +89,7 @@ int i;
 	}
 
     // Scroll the display while drawing tiles in the landscape orientation
-	spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
+	spilcdSetOrientation(LCD_ORIENTATION_ROTATED);
 	for (x=0; x<=320; x++)
 	{
 		if ((x & 15) == 0)
@@ -116,7 +116,7 @@ int i;
 	printf("Full screen updates max out at %03.2f FPS\n",10000.0/(float)iTime);
     // Erase and start over in portrait orientation
     spilcdFill(0);
-    spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
+    spilcdSetOrientation(LCD_ORIENTATION_ROTATED);
     spilcdScrollReset();
     // Draw some rectangles
     iTime = MilliTime();
@@ -136,7 +136,7 @@ int i;
     printf("2000 random rectangles in %d ms\n", iTime);
     usleep(3000000);
 
-    spilcdSetOrientation(LCD_ORIENTATION_PORTRAIT);
+    spilcdSetOrientation(LCD_ORIENTATION_NATIVE);
     spilcdFill(0);
     // Draw scrolling 8x8 text with various background/foreground colors
 	for (rc=0; rc<height; rc++)
@@ -150,7 +150,7 @@ int i;
 	usleep(2000000);
     
     // Change to landscape orientation and draw more text
-	spilcdSetOrientation(LCD_ORIENTATION_LANDSCAPE);
+	spilcdSetOrientation(LCD_ORIENTATION_ROTATED);
 	spilcdFill(0);
 	for (rc=0; rc<width; rc += 8)
 	{

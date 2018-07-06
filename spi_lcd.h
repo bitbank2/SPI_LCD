@@ -100,6 +100,8 @@ int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iCo
 // Draw a NxN tile scaled to 2x width, 1.5x height with pixel averaging
 int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch);
 
+int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch);
+
 // Draw a 16x16 tile as 16x13 (with priority to non-black pixels)
 int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch);
 
@@ -129,8 +131,8 @@ int spilcdSetOrientation(int iOrientation);
 // This affects the coordinate system and rotates the
 // drawing direction of fonts and tiles
 //
-#define LCD_ORIENTATION_PORTRAIT 1
-#define LCD_ORIENTATION_LANDSCAPE 2
+#define LCD_ORIENTATION_NATIVE 1
+#define LCD_ORIENTATION_ROTATED 2
 #define LCD_ILI9341 1
 #define LCD_HX8357 2
 #define LCD_ST7735 3

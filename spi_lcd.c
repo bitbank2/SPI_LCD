@@ -22,20 +22,20 @@
 // control lines. 
 
 // Use one of the following 4 methods for talking to the SPI/GPIO
-#define USE_PIGPIO
+//#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-//#define USE_GENERIC
+#define USE_GENERIC
 
 // For generic SPI access (kernel drivers), select the board pinout (only one)
 //#define USE_NANOPI2
 //#define USE_NANOPIK2
 //#define USE_NANOPIDUO
 //#define USE_NANOPINEO
-#define USE_RPI
+//#define USE_RPI
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
-//#define USE_BANANAPIM2ZERO
+#define USE_BANANAPIM2ZERO
 //#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
@@ -57,6 +57,9 @@
 #ifdef USE_PIGPIO
 #include <pigpio.h>
 #endif // USE_PIGPIO
+#ifdef __NEON__
+#include <arm_neon.h>
+#endif //__NEON__
 
 #ifdef USE_GENERIC
 #include <linux/spi/spidev.h>
@@ -74,7 +77,7 @@ static int iTouchChannel, iTouchType;
 static int iDCPin, iResetPin, iLEDPin; // pin numbers for the GPIO control lines
 static int iMinX, iMaxX, iMinY, iMaxY; // touch calibration values
 static int iScrollOffset; // current scroll amount
-static int iOrientation = LCD_ORIENTATION_PORTRAIT; // default to 'natural' orientation
+static int iOrientation = LCD_ORIENTATION_NATIVE; // default to 'natural' orientation
 static int iLCDType;
 static int iWidth, iHeight;
 static int iCurrentWidth, iCurrentHeight; // reflects virtual size due to orientation
@@ -901,7 +904,7 @@ void spilcdScroll(int iLines, int iFillColor)
 		}
 		else
 			iStart = iHeight - iLines;
-		if (iOrientation == LCD_ORIENTATION_LANDSCAPE)
+		if (iOrientation == LCD_ORIENTATION_ROTATED)
 			spilcdSetPosition(iStart, iWidth-1, iLines, iWidth);
 		else
 			spilcdSetPosition(0, iStart, iWidth, iLines);
@@ -1082,7 +1085,7 @@ static void spilcdSetPosition(int x, int y, int w, int h)
 unsigned char ucBuf[8];
 int t;
 
-	if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // rotate 90 clockwise
+	if (iOrientation == LCD_ORIENTATION_ROTATED) // rotate 90 clockwise
 	{
 		// rotate the coordinate system
 		t = x;
@@ -1368,7 +1371,175 @@ uint32_t u32Mask = 0xffff;
         }
 	return 0;
 } /* spilcdDrawScaledTile() */
+//
+// Draw a 24x24 RGB565 tile scaled to 40x40
+// The main purpose of this function is for GameBoy emulation
+// Since the original display is 160x144, this function allows it to be 
+// stretched 166% larger (266x240). Not a perfect fit for 320x240, but better
+// Each group of 3x3 pixels becomes a group of 5x5 pixels by averaging the pixels
+//
+// +-+-+-+ becomes +----+----+----+----+----+
+// |A|B|C|         |A   |ab  |B   |bc  |C   |
+// +-+-+-+         +----+----+----+----+----+
+// |D|E|F|         |ad  |abde|be  |becf|cf  |
+// +-+-+-+         +----+----+----+----+----+
+// |G|H|I|         |D   |de  |E   |ef  |F   |
+// +-+-+-+         +----+----+----+----+----+
+//                 |dg  |dgeh|eh  |ehfi|fi  |
+//                 +----+----+----+----+----+
+//                 |G   |gh  |H   |hi  |I   |
+//                 +----+----+----+----+----+
+//
+// The x/y coordinates will be scaled as well
+//
+int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch)
+{
+int i, j, iPitch16;
+uint16_t *s, *d;
+uint32_t u32A, u32B, u32C, u32D, u32E, u32F;
+uint32_t t1, t2, u32ab, u32bc, u32de, u32ef, u32ad, u32be, u32cf;
+uint32_t u32Magic = 0xf7def7de;
+int bFlipped;
 
+	if (file_spi < 0) return -1;
+	bFlipped = (iWidth < 320); // rotated display
+
+	// scale coordinates for stretching
+	x = (x * 5)/3;
+	y = (y * 5)/3;
+        iPitch16 = iPitch/2;
+	if (cx < 24 || cy < 24)
+		memset(ucRXBuf, 0, 40*40*2);
+	for (j=0; j<cy/3; j++) // 8 blocks of 3 lines
+	{
+		s = (uint16_t *)&pTile[j*3*iPitch];
+		if (bFlipped)
+			d = (uint16_t *)&ucRXBuf[(35-(j*5))*2];
+		else
+			d = (uint16_t *)&ucRXBuf[j*40*5*2];
+		for (i=0; i<cx-2; i+=3) // source columns (3 at a time)
+		{
+			u32A = s[i];
+			u32B = s[i+1];
+			u32C = s[i+2];
+			u32D = s[i+iPitch16];
+			u32E = s[i+iPitch16+1];
+			u32F = s[i+iPitch16 + 2];
+			u32bc = u32ab = (u32B & u32Magic) >> 1;
+			u32ab += ((u32A & u32Magic) >> 1);
+			u32bc += (u32C & u32Magic) >> 1;
+			u32de = u32ef = ((u32E & u32Magic) >> 1);
+			u32de += ((u32D & u32Magic) >> 1);
+			u32ef += ((u32F & u32Magic) >> 1);
+			u32ad = ((u32A & u32Magic) >> 1) + ((u32D & u32Magic) >> 1);
+			u32be = ((u32B & u32Magic) >> 1) + ((u32E & u32Magic) >> 1);
+			u32cf = ((u32C & u32Magic) >> 1) + ((u32F & u32Magic) >> 1);
+			// first row
+			if (bFlipped)
+			{
+			d[4] = __builtin_bswap16(u32A); // swap byte order
+			d[44] = __builtin_bswap16(u32ab);
+			d[84] = __builtin_bswap16(u32B);
+			d[124] = __builtin_bswap16(u32bc);
+			d[164] = __builtin_bswap16(u32C);
+			}
+			else
+			{
+			d[0] = __builtin_bswap16(u32A); // swap byte order
+			d[1] = __builtin_bswap16(u32ab);
+			d[2] = __builtin_bswap16(u32B);
+			d[3] = __builtin_bswap16(u32bc);
+			d[4] = __builtin_bswap16(u32C);
+			}
+			// second row
+			t1 = ((u32ab & u32Magic) >> 1) + ((u32de & u32Magic) >> 1);
+			t2 = ((u32be & u32Magic) >> 1) + ((u32cf & u32Magic) >> 1);
+			if (bFlipped)
+			{
+			d[3] = __builtin_bswap16(u32ad);
+			d[43] = __builtin_bswap16(t1);
+			d[83] = __builtin_bswap16(u32be);
+			d[123] = __builtin_bswap16(t2);
+			d[163] = __builtin_bswap16(u32cf);
+			}
+			else
+			{
+			d[40] = __builtin_bswap16(u32ad);
+			d[41] = __builtin_bswap16(t1);
+			d[42] = __builtin_bswap16(u32be);
+			d[43] = __builtin_bswap16(t2);
+			d[44] = __builtin_bswap16(u32cf);
+			}
+			// third row
+			if (bFlipped)
+			{
+			d[2] = __builtin_bswap16(u32D);
+			d[42] = __builtin_bswap16(u32de);
+			d[82] = __builtin_bswap16(u32E);
+			d[122] = __builtin_bswap16(u32ef);
+			d[162] = __builtin_bswap16(u32F);
+			}
+			else
+			{
+			d[80] = __builtin_bswap16(u32D);
+			d[81] = __builtin_bswap16(u32de);
+			d[82] = __builtin_bswap16(u32E);
+			d[83] = __builtin_bswap16(u32ef);
+			d[84] = __builtin_bswap16(u32F);
+			}
+			// fourth row
+			u32A = s[i+iPitch16*2];
+			u32B = s[i+iPitch16*2 + 1];
+			u32C = s[i+iPitch16*2 + 2];
+			u32bc = u32ab = (u32B & u32Magic) >> 1;
+			u32ab += ((u32A & u32Magic) >> 1);
+			u32bc += (u32C & u32Magic) >> 1;
+			u32ad = ((u32A & u32Magic) >> 1) + ((u32D & u32Magic) >> 1);
+			u32be = ((u32B & u32Magic) >> 1) + ((u32E & u32Magic) >> 1);
+			u32cf = ((u32C & u32Magic) >> 1) + ((u32F & u32Magic) >> 1);
+			t1 = ((u32ab & u32Magic) >> 1) + ((u32de & u32Magic) >> 1);
+			t2 = ((u32be & u32Magic) >> 1) + ((u32cf & u32Magic) >> 1);
+			if (bFlipped)
+			{
+			d[1] = __builtin_bswap16(u32ad);
+			d[41] = __builtin_bswap16(t1);
+			d[81] = __builtin_bswap16(u32be);
+			d[121] = __builtin_bswap16(t2);
+			d[161] = __builtin_bswap16(u32cf);
+			}
+			else
+			{
+			d[120] = __builtin_bswap16(u32ad);
+			d[121] = __builtin_bswap16(t1);
+			d[122] = __builtin_bswap16(u32be);
+			d[123] = __builtin_bswap16(t2);
+			d[124] = __builtin_bswap16(u32cf);
+			}
+			// fifth row
+			if (bFlipped)
+			{
+			d[0] = __builtin_bswap16(u32A);
+			d[40] = __builtin_bswap16(u32ab);
+			d[80] = __builtin_bswap16(u32B);
+			d[120] = __builtin_bswap16(u32bc);
+			d[160] = __builtin_bswap16(u32C);
+			d += 200;
+			}
+			else
+			{
+			d[160] = __builtin_bswap16(u32A);
+			d[161] = __builtin_bswap16(u32ab);
+			d[162] = __builtin_bswap16(u32B);
+			d[163] = __builtin_bswap16(u32bc);
+			d[164] = __builtin_bswap16(u32C);
+			d += 5;
+			}
+		} // for i
+	} // for j
+        spilcdSetPosition(x, y, 40, 40);
+        spilcdWriteDataBlock(ucRXBuf, 40*40*2);
+	return 0;
+} /* spilcdDraw53Tile() */
 //
 // Draw a 16x16 RGB656 tile with select rows/columns removed
 // the mask contains 1 bit for every column/row that should be drawn
@@ -1387,7 +1558,7 @@ int iNumCols, iNumRows, iTotalSize;
 
         if (file_spi < 0) return -1;
 
-        if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // need to rotate the data
+        if (iOrientation == LCD_ORIENTATION_ROTATED) // need to rotate the data
         {
                 // First convert to big-endian order
                 d = ucTemp;
@@ -1464,7 +1635,7 @@ unsigned char *s, *d;
 	if (iTileWidth*iTileHeight > 2048)
 		return -1; // tile must fit in 4k SPI block size
 
-	if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // need to rotate the data
+	if (iOrientation == LCD_ORIENTATION_ROTATED) // need to rotate the data
 	{
         	// First convert to big-endian order
         	d = ucRXBuf;
@@ -1559,10 +1730,10 @@ unsigned short *usD;
 
         iLen = strlen(szMsg);
 	if (iLen <=0) return -1; // can't use this function
-        iMaxLen = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iWidth : iHeight;
+        iMaxLen = (iOrientation == LCD_ORIENTATION_NATIVE) ? iWidth : iHeight;
 
                 if ((8*iLen) + x > iMaxLen) iLen = (iMaxLen - x)/8; // can't display it all
-		if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // draw rotated
+		if (iOrientation == LCD_ORIENTATION_ROTATED) // draw rotated
                 {
 			iChars = 0;
 			for (i=0; i<iLen; i++)
@@ -1635,7 +1806,7 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 	if (file_spi < 0) return -1; // not initialized
 
 	iLen = strlen(szMsg);
-	iMaxLen = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iWidth : iHeight;
+	iMaxLen = (iOrientation == LCD_ORIENTATION_NATIVE) ? iWidth : iHeight;
 
 	if (bLarge) // draw 16x32 font
 	{
@@ -1648,7 +1819,7 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 
 			s = &ucFont[9728 + (unsigned char)szMsg[i]*64];
 			usD = &usTemp[0];
-			if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // rotated
+			if (iOrientation == LCD_ORIENTATION_ROTATED) // rotated
 			{
 				spilcdSetPosition(x+(i*16), y,16,32);
 				for (j=0; j<8; j++)
@@ -1711,7 +1882,7 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 		{
 			s = &ucFont[(unsigned char)szMsg[i] * 8];
 			usD = &usTemp[0];
-			if (iOrientation == LCD_ORIENTATION_LANDSCAPE) // draw rotated
+			if (iOrientation == LCD_ORIENTATION_ROTATED) // draw rotated
 			{
 				spilcdSetPosition(x+(i*8), y, 8, 8);
 				for (k=0; k<8; k++) // for each scanline
@@ -1755,11 +1926,11 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 //
 int spilcdSetOrientation(int iOrient)
 {
-	if (iOrient != LCD_ORIENTATION_PORTRAIT && iOrient != LCD_ORIENTATION_LANDSCAPE)
+	if (iOrient != LCD_ORIENTATION_NATIVE && iOrient != LCD_ORIENTATION_ROTATED)
 		return -1;
 	iOrientation = iOrient; // nothing else needed to do
-	iCurrentWidth = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iWidth : iHeight;
-	iCurrentHeight = (iOrientation == LCD_ORIENTATION_PORTRAIT) ? iHeight : iWidth;
+	iCurrentWidth = (iOrientation == LCD_ORIENTATION_NATIVE) ? iWidth : iHeight;
+	iCurrentHeight = (iOrientation == LCD_ORIENTATION_NATIVE) ? iHeight : iWidth;
 	return 0;
 } /* spilcdSetOrientation() */
 
@@ -1778,7 +1949,7 @@ int iOldOrient;
 	usC |= (usC << 16);
 	// make sure we're in landscape mode to use the correct coordinates
 	iOldOrient = iOrientation;
-	iOrientation = LCD_ORIENTATION_PORTRAIT;
+	iOrientation = LCD_ORIENTATION_NATIVE;
 	spilcdScrollReset();
 	spilcdSetPosition(0,0,iWidth,iHeight);
 	iOrientation = iOldOrient;
