@@ -1,8 +1,10 @@
 PROCESSOR:=$(shell uname -m)
 ifeq ($(PROCESSOR), armv6l)
 CFLAGS=-c -Wall -O2
-else
+else ifeq ($(PROCESSOR), armv7l)
 CFLAGS=-c -mfpu=neon -Wall -O2 -D__NEON__
+else
+CFLAGS=-c -Wall -O2
 endif
 
 all: libspi_lcd.a
