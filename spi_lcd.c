@@ -832,11 +832,14 @@ char szTemp[64];
 int rc;
 
 	iGPIO = iGenericPins[iPin];
+	if (iGPIO == -1) // invalid pin, return idle button
+		return 1;
 	if (iPinHandles[iGPIO] == -1)
 	{
 		sprintf(szTemp, "/sys/class/gpio/gpio%d/value", iGPIO);
 		iPinHandles[iGPIO] = open(szTemp, O_RDONLY);
 	}
+	lseek(iPinHandles[iGPIO], 0, SEEK_SET);
 	rc = read(iPinHandles[iGPIO], szTemp, 1);
 	if (rc < 0) // do nothing
 	{}
