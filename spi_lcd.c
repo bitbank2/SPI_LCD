@@ -32,6 +32,7 @@
 //#define USE_NANOPIK2
 //#define USE_NANOPIDUO
 //#define USE_NANOPINEO
+//define USE_NANOPIM1
 //#define USE_RPI
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
@@ -143,6 +144,10 @@ static int iGenericPins[] = {-1,-1,-1,99,-1,98,-1,32+28,96+21,-1,96+17,
                        64+8,-1,64+9,64+28,64+10,-1,64+12,64+7,64+11,162,-1,163};
 
 #endif // USE_NANOPI2
+
+#ifdef USE_NANOPIM1
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,203,198,-1,199,0,6,2,-1,3,200,-1,201,64,-1,65,1,66,67,-1,17,19,18,20,-1,21,7,8,-1,16,13,9,15,-1,14};
+#endif // USE_NANOPIM1
 
 #ifdef USE_NANOPIK2
 static int iGenericPins[] = {-1,-1,-1,205,-1,206,-1,211,102,-1,225,212,227,213,-1,214,226,-1,215,216,-1,218,217,220,219,-1,221,207,208,222,-1,127,223,155,-1,252,-1,-1,-1,-1,-1};
