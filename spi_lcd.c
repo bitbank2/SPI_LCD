@@ -35,7 +35,8 @@
 //#define USE_RPI
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
-#define USE_BANANAPIM2ZERO
+//#define USE_BANANAPIM2ZERO
+#define USE_NANOPINEOCORE
 //#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
@@ -98,6 +99,16 @@ static int iGenericPins[] = {-1,-1,-1,2,-1,3,-1,4,14,-1,
 			-1,6,12,13,-1,19,16,26,20,-1,
 			21};
 #endif // USE_RPI
+
+#ifdef USE_NANOPINEOCORE
+static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,203,198,-1,
+                        199,0,6,2,-1,3,200,-1,201,64,
+                        -1,65,1,66,67,-1,-1,-1,-1,-1,
+                        -1,-1,-1,-1,-1,-1,-1,-1,167,-1,
+                        140,-1,141,-1,-1,-1,15,-1,16,-1,
+                        14,-1,13,-1,-1,363,-1,17,-1,18,
+                        -1,19,164,20,162,21,-1,-1,-1};
+#endif // USE_NANOPINEOCORE
 
 #ifdef USE_ORANGEPIZEROPLUS2
 static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,0,-1,1,352,107,353,-1,3,
@@ -454,7 +465,7 @@ unsigned char ucRxBuf[4];
 } /* spilcdInitTouch() */
 
 #ifdef USE_GENERIC
-void GenericAddGPIO(int iPin, int iDirection)
+void GenericAddGPIO(int iPin, int iDirection, int bPullup)
 {
 char szName[64];
 int file_gpio, rc;
@@ -467,7 +478,18 @@ int file_gpio, rc;
 	if (iDirection == GPIO_OUT)
 		rc = write(file_gpio, "out", 3);
 	else
+	{
+                if (bPullup) // set output value to 1
+                {
+                int temp;
+                        rc = write(file_gpio, "out",3);
+                        sprintf(szName, "/sys/class/gpio/gpio%d/value", iPin);
+                        temp = open(szName, O_WRONLY);
+                        rc = write(temp, "1",1);
+                        close(temp);
+                }
 		rc = write(file_gpio, "in", 2);
+	}
 	close(file_gpio);
 	iPinHandles[iPin] = -1;
 	if (rc < 0) // added to suppress compiler warnings
@@ -636,9 +658,9 @@ int i, iCount;
 	}
 
 #ifdef USE_GENERIC
-	GenericAddGPIO(iDCPin, GPIO_OUT);
-	GenericAddGPIO(iResetPin, GPIO_OUT);
-	GenericAddGPIO(iLEDPin, GPIO_OUT);
+	GenericAddGPIO(iDCPin, GPIO_OUT, 0);
+	GenericAddGPIO(iResetPin, GPIO_OUT, 0);
+	GenericAddGPIO(iLEDPin, GPIO_OUT, 0);
 #endif // USE_GENERIC
 
 #ifdef USE_BCM2835
@@ -770,7 +792,7 @@ int iGPIO;
 	iGPIO = iGenericPins[iPin];
 	if (iGPIO == -1) // invalid pin number
 		return -1;
-	GenericAddGPIO(iGPIO, GPIO_IN);
+	GenericAddGPIO(iGPIO, GPIO_IN, 1);
 #endif // USE_GENERIC
 
 #ifdef USE_BCM2835
