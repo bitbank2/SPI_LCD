@@ -1619,19 +1619,25 @@ int iNumCols, iNumRows, iTotalSize;
         }
         else // native orientation
         {
+	uint16_t *s16 = (uint16_t *)s;
+	uint16_t u16, *d16 = (uint16_t *)d;
+	int iMask;
+
         // First convert to big-endian order
-        d = ucTemp;
+        d16 = (uint16_t *)ucTemp;
         for (j=0; j<16; j++)
         {
 		if ((iRowMask & (1<<j)) == 0) continue; // skip row
-                s = &pTile[j*iPitch];
+                s16 = (uint16_t *)&pTile[j*iPitch];
+		iMask = iColMask;
                 for (i=0; i<16; i++)
                 {
-			if ((iColMask & (1<<i)) == 0) continue; // skip col
-                        d[1] = s[0];
-                        d[0] = s[1]; // swap byte order (MSB first)
-                        d += 2;
-                        s += 2;
+			u16 = *s16++;
+			if (iMask & 1)
+			{
+                        	*d16++ = __builtin_bswap16(u16);
+                        }
+			iMask >>= 1;
                 } // for i;
         } // for j
         spilcdSetPosition(x, y, iNumCols, iNumRows);
