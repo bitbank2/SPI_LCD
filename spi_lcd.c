@@ -1704,17 +1704,15 @@ unsigned char *s, *d;
 	}
 	else // native orientation
 	{
+        uint16_t *s16, *d16;
 	// First convert to big-endian order
-	d = ucRXBuf;
+	d16 = (uint16_t *)ucRXBuf;
 	for (j=0; j<iTileHeight; j++)
 	{
-		s = &pTile[j*iPitch];
+		s16 = (uint16_t*)&pTile[j*iPitch];
 		for (i=0; i<iTileWidth; i++)
 		{
-			d[1] = s[0];
-			d[0] = s[1]; // swap byte order (MSB first)
-			d += 2;
-			s += 2;
+			*d16++ = __builtin_bswap16(*s16++);
 		} // for i;
 	} // for j
 	spilcdSetPosition(x, y, iTileWidth, iTileHeight);
