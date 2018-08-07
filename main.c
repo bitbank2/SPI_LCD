@@ -38,8 +38,11 @@ unsigned short usColors[8] = {0xf800, 0x7e0, 0x1f, 0xffff, 0xffe0, 0x7ff, 0xf81f
 //#define LCD LCD_ILI9341
 //int width=240, height=320;
 
-#define LCD LCD_ILI9342
-int width=320, height=240;
+//#define LCD LCD_ILI9342
+//int width=320, height=240;
+
+#define LCD LCD_ST7789
+int width=240, height=240;
 
 //#define LCD LCD_HX8357
 //int width=320, height=480;
@@ -81,7 +84,7 @@ int i;
 	// Initialize the library on SPI channel 0
 	// The pin numbers are for 40-pin headers on RPi2, RPi3, RPi0
 	// Pass it the GPIO pin numbers used for the following:
-	rc = spilcdInit(LCD, 0, 0, 50000000, 13, 11, 18); // LCD type, flip 180, SPI Channel, D/C, RST, LED
+	rc = spilcdInit(LCD, 0, 0, 31250000, 18, 22, 11); // LCD type, flip 180, SPI Channel, D/C, RST, LED
 	if (rc != 0)
 	{
 		printf("Problem initializing spilcd library\n");
@@ -90,7 +93,7 @@ int i;
 
     // Scroll the display while drawing tiles in the landscape orientation
 	spilcdSetOrientation(LCD_ORIENTATION_ROTATED);
-	for (x=0; x<=320; x++)
+	for (x=0; x<=height; x++)
 	{
 		if ((x & 15) == 0)
 		{

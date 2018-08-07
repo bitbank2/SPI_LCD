@@ -22,10 +22,10 @@
 // control lines. 
 
 // Use one of the following 4 methods for talking to the SPI/GPIO
-//#define USE_PIGPIO
+#define USE_PIGPIO
 //#define USE_BCM2835
 //#define USE_WIRINGPI
-#define USE_GENERIC
+//#define USE_GENERIC
 
 // For generic SPI access (kernel drivers), select the board pinout (only one)
 //#define USE_NANOPI2
@@ -37,7 +37,7 @@
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
 //#define USE_BANANAPIM2ZERO
-#define USE_NANOPINEOCORE
+//#define USE_NANOPINEOCORE
 //#define USE_ORANGEPIZEROPLUS2
 
 #include <unistd.h>
@@ -254,6 +254,29 @@ static unsigned char uc320InitList[] = {
 //                0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F, // Set Gamma
 //        3, 0xb1, 0x00, 0x10, // FrameRate Control 119Hz
         0
+};
+// List of command/parameters to initialize the ST7789 LCD
+static unsigned char uc240x240InitList[] = {
+	1, 0x13, // partial mode off
+	1, 0x21, // display inversion off
+	2, 0x36,0x08,	// memory access 0xc0 for 180 degree flipped
+	2, 0x3a,0x55,	// pixel format; 5=RGB565
+	3, 0x37,0x00,0x00, //
+	6, 0xb2,0x0c,0x0c,0x00,0x33,0x33, // Porch control
+	2, 0xb7,0x35,	// gate control
+	2, 0xbb,0x1a,	// VCOM
+	2, 0xc0,0x2c,	// LCM
+	2, 0xc2,0x01,	// VDV & VRH command enable
+	2, 0xc3,0x0b,	// VRH set
+	2, 0xc4,0x20,	// VDV set
+	2, 0xc6,0x0f,	// FR control 2
+	3, 0xd0, 0xa4, 0xa1, 	// Power control 1
+	15, 0xe0, 0x00,0x19,0x1e,0x0a,0x09,0x15,0x3d,0x44,0x51,0x12,0x03,
+		0x00,0x3f,0x3f, 	// gamma 1
+	15, 0xe1, 0x00,0x18,0x1e,0x0a,0x09,0x25,0x3f,0x43,0x52,0x33,0x03,
+		0x00,0x3f,0x3f,		// gamma 2
+	1, 0x29,	// display on
+	0
 };
 
 // List of command/parameters to initialize the st7735 display
@@ -564,7 +587,7 @@ int spilcdInit(int iType, int bFlipped, int iChannel, int iSPIFreq, int iDC, int
 unsigned char *s;
 int i, iCount;
 
-	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789)
 	{
 		printf("Unsupported display type\n");
 		return -1;
@@ -703,7 +726,17 @@ int i, iCount;
 	spilcdWriteCommand(0x11);
 	usleep(250000);
 	}
-	if (iLCDType == LCD_SSD1351)
+	if (iLCDType == LCD_ST7789)
+	{
+		s = uc240x240InitList;
+		if (bFlipped)
+			s[6] = 0xc0; // flip 180
+		else
+			s[6] = 0x00;
+		iCurrentWidth = iWidth = 240;
+		iCurrentHeight = iHeight = 240;
+	} // ST7789
+	else if (iLCDType == LCD_SSD1351)
 	{
 		s = ucOLEDInitList; // do the commands manually
 
@@ -905,7 +938,7 @@ void spilcdScroll(int iLines, int iFillColor)
 	else
 	{
 		spilcdWriteCommand(0x37); // Vertical scrolling start address
-		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735)
+		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735 || iLCDType == LCD_ST7789)
 		{
 			spilcdWriteData16(iScrollOffset);
 		}
@@ -1142,7 +1175,7 @@ int t;
 		return;
 	}
 	spilcdWriteCommand(0x2a); // set column address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735 || iLCDType == LCD_ST7789)
 	{
 		ucBuf[0] = (unsigned char)(x >> 8);
 		ucBuf[1] = (unsigned char)x;
@@ -1168,7 +1201,7 @@ int t;
 		myspiWrite(ucBuf, 8); 
 	}
 	spilcdWriteCommand(0x2b); // set row address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735 || iLCDType == LCD_ST7789)
 	{
 		ucBuf[0] = (unsigned char)(y >> 8);
 		ucBuf[1] = (unsigned char)y;
@@ -1345,7 +1378,7 @@ uint32_t u32Mask = 0xffff;
 //               +-+-+-+-+
 //
 // The x/y coordinates will be scaled 2x in the X direction and 1.5x in the Y
-// It is assumed that the display is set to LANDSCAPE orientation
+// It is assumed that the display is set to ROTATED orientation
 //
 int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch)
 {
@@ -1730,6 +1763,61 @@ unsigned char *s, *d;
 	} // portrait orientation
 	return 0;
 } /* spilcdDrawTile() */
+//
+// Draw a NxN RGB565 tile
+// This reverses the pixel byte order and sets a memory "window"
+// of pixels so that the write can occur in one shot
+// Scales the tile by 150% (for GameBoy/GameGear)
+//
+int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch)
+{
+int i, j, iPitch32, iLocalPitch;
+uint32_t ul32A, ul32B, ul32Avg, ul32Avg2;
+uint16_t u16Avg, u16Avg2;
+uint32_t u32Magic = 0xf7def7de;
+uint16_t u16Magic = 0xf7de;
+uint16_t *d16;
+uint32_t *s32;
+
+	if (file_spi < 0) return -1;
+	if (iTileWidth*iTileHeight > 1365)
+		return -1; // tile must fit in 4k SPI block size
+
+	iPitch32 = iPitch / 4;
+	iLocalPitch = (iTileWidth * 3)/2; // offset to next output line
+	d16 = (uint16_t *)ucRXBuf;
+	for (j=0; j<iTileHeight; j+=2)
+	{
+		s32 = (uint32_t*)&pTile[j*iPitch];
+		for (i=0; i<iTileWidth; i+=2) // turn 2x2 pixels into 3x3 
+		{
+			ul32A = s32[0];
+			ul32B = s32[iPitch32]; // get 2x2 pixels
+			// top row
+			ul32Avg = ((ul32A & u32Magic) >> 1);
+			ul32Avg2 = ((ul32B & u32Magic) >> 1);
+			u16Avg = (uint16_t)(ul32Avg + (ul32Avg >> 16)); // average the 2 pixels
+			d16[0] = __builtin_bswap16((uint16_t)ul32A); // first pixel
+			d16[1] = __builtin_bswap16(u16Avg); // middle (new) pixel
+			d16[2] = __builtin_bswap16((uint16_t)(ul32A >> 16)); // 3rd pixel
+			u16Avg2 = (uint16_t)(ul32Avg2 + (ul32Avg2 >> 16)); // bottom line averaged pixel
+			d16[iLocalPitch] = __builtin_bswap16((uint16_t)(ul32Avg + ul32Avg2)); // vertical average
+			d16[iLocalPitch+2] = __builtin_bswap16((uint16_t)((ul32Avg + ul32Avg2)>>16)); // vertical average
+			d16[iLocalPitch*2] = __builtin_bswap16((uint16_t)ul32B); // last line 1st
+			d16[iLocalPitch*2+1] = __builtin_bswap16(u16Avg2); // middle pixel
+			d16[iLocalPitch*2+2] = __builtin_bswap16((uint16_t)(ul32B >> 16)); // 3rd pixel
+			u16Avg = (u16Avg & u16Magic) >> 1;
+			u16Avg2 = (u16Avg2 & u16Magic) >> 1;
+			d16[iLocalPitch+1] = __builtin_bswap16(u16Avg + u16Avg2); // middle pixel
+			d16 += 3;
+			s32 += 1;
+		} // for i;
+		d16 += iLocalPitch*2; // skip lines we already output
+	} // for j
+	spilcdSetPosition((x*3)/2, (y*3)/2, (iTileWidth*3)/2, (iTileHeight*3)/2);
+      	spilcdWriteDataBlock(ucRXBuf, (iTileWidth*iTileHeight*9)/2);
+	return 0;
+} /* spilcdDrawTile150() */
 
 //
 // Draw an individual RGB565 pixel

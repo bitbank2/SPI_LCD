@@ -91,6 +91,10 @@ int spilcdReadPin(int iPin);
 //
 void spilcdScroll(int iLines, int iFillColor);
 
+//
+// Draw a NxN tile scaled 150% in both directions
+int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch);
+
 // Draw a NxN tile
 int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch);
 
@@ -133,11 +137,13 @@ int spilcdSetOrientation(int iOrientation);
 //
 #define LCD_ORIENTATION_NATIVE 1
 #define LCD_ORIENTATION_ROTATED 2
+
 #define LCD_ILI9341 1
 #define LCD_HX8357 2
 #define LCD_ST7735 3
 #define LCD_SSD1351 4
 #define LCD_ILI9342 5
+#define LCD_ST7789 6
 
 // touch panel types
 #define TOUCH_XPT2046 1
