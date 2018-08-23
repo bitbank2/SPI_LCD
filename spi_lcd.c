@@ -581,12 +581,14 @@ static unsigned char ucE1_1[] = {0x00, 0x25, 0x27, 0x05, 0x10, 0x09, 0x3a, 0x78,
 
 //
 // Initialize the LCD controller and clear the display
+// LED pin is optional - pass as -1 to disable
 //
 int spilcdInit(int iType, int bFlipped, int iChannel, int iSPIFreq, int iDC, int iReset, int iLED)
 {
 unsigned char *s;
 int i, iCount;
 
+	iLEDPin = -1; // assume it's not defined
 	if (iType != LCD_ILI9341 && iType != LCD_ST7735 && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789)
 	{
 		printf("Unsupported display type\n");
@@ -598,8 +600,9 @@ int i, iCount;
 #ifdef USE_BCM2835
      iDCPin = iBCM2835Pins[iDC]; // use the pin numbers as-is
      iResetPin = iBCM2835Pins[iReset];
-     iLEDPin = iBCM2835Pins[iLED];
-     if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
+     if (iLED != -1)
+        iLEDPin = iBCM2835Pins[iLED];
+     if (iDCPin == -1 || iResetPin == -1)
      {
         printf("One or more invalid GPIO Pin numbers\n");
         return -1;
@@ -627,8 +630,9 @@ int i, iCount;
 #ifdef USE_PIGPIO
 	iDCPin = iPIGPins[iDC];
 	iResetPin = iPIGPins[iReset];
-	iLEDPin = iPIGPins[iLED];
-	if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
+        if (iLED != -1)
+	   iLEDPin = iPIGPins[iLED];
+	if (iDCPin == -1 || iResetPin == -1)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
@@ -641,8 +645,9 @@ int i, iCount;
 #ifdef USE_GENERIC
 	iDCPin = iGenericPins[iDC];
 	iResetPin = iGenericPins[iReset];
-	iLEDPin = iGenericPins[iLED];
-	if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
+	if (iLED != -1)
+		iLEDPin = iGenericPins[iLED];
+	if (iDCPin == -1 || iResetPin == -1)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
@@ -669,9 +674,10 @@ int i, iCount;
 #ifdef USE_WIRINGPI
 	iDCPin = iWPPins[iDC];
 	iResetPin = iWPPins[iReset];
-	iLEDPin = iWPPins[iLED];
+	if (iLED != -1)
+		iLEDPin = iWPPins[iLED];
 
-	if (iDCPin == -1 || iResetPin == -1 || iLEDPin == -1)
+	if (iDCPin == -1 || iResetPin == -1)
 	{
 		printf("One or more invalid GPIO pin numbers\n");
 		return -1;
@@ -688,24 +694,28 @@ int i, iCount;
 #ifdef USE_GENERIC
 	GenericAddGPIO(iDCPin, GPIO_OUT, 0);
 	GenericAddGPIO(iResetPin, GPIO_OUT, 0);
-	GenericAddGPIO(iLEDPin, GPIO_OUT, 0);
+	if (iLEDPin != -1)
+		GenericAddGPIO(iLEDPin, GPIO_OUT, 0);
 #endif // USE_GENERIC
 
 #ifdef USE_BCM2835
 	bcm2835_gpio_fsel(iDCPin, BCM2835_GPIO_FSEL_OUTP);
 	bcm2835_gpio_fsel(iResetPin, BCM2835_GPIO_FSEL_OUTP);
-        bcm2835_gpio_fsel(iLEDPin, BCM2835_GPIO_FSEL_OUTP);
+	if (iLEDPin != -1)
+        	bcm2835_gpio_fsel(iLEDPin, BCM2835_GPIO_FSEL_OUTP);
 #endif
 #ifdef USE_PIGPIO
 	gpioSetMode(iDCPin, PI_OUTPUT);
 	gpioSetMode(iResetPin, PI_OUTPUT);
-	gpioSetMode(iLEDPin, PI_OUTPUT); 
+	if (iLEDPin != -1)
+		gpioSetMode(iLEDPin, PI_OUTPUT); 
 #endif
 
 #ifdef USE_WIRINGPI
         pinMode(iDCPin, OUTPUT);
 	pinMode(iResetPin, OUTPUT);
-	pinMode(iLEDPin, OUTPUT);
+	if (iLEDPin != -1)
+		pinMode(iLEDPin, OUTPUT);
 #endif
 
 	myPinWrite(iResetPin, 1);
@@ -717,7 +727,8 @@ int i, iCount;
 
 	if (iLCDType != LCD_SSD1351) // no backlight and no soft reset on OLED
 	{
-	myPinWrite(iLEDPin, 1); // turn on the backlight
+	if (iLEDPin != -1)
+		myPinWrite(iLEDPin, 1); // turn on the backlight
 
 
 	spilcdWriteCommand(0x01); // software reset
@@ -1069,7 +1080,8 @@ void spilcdShutdown(void)
 	close(file_spi);
 	GenericRemoveGPIO(iDCPin);
 	GenericRemoveGPIO(iResetPin);
-	GenericRemoveGPIO(iLEDPin);
+	if (iLEDPin != -1)
+		GenericRemoveGPIO(iLEDPin);
 #endif // USE_GENERIC
 
 #ifdef USE_PIGPIO
@@ -1080,7 +1092,8 @@ void spilcdShutdown(void)
 #endif // USE_WIRINGPI
 
 		file_spi = -1;
-		myPinWrite(iLEDPin, 0); // turn off the backlight
+		if (iLEDPin != -1)
+			myPinWrite(iLEDPin, 0); // turn off the backlight
 #ifdef USE_PIGPIO
 		gpioTerminate();
 #endif
