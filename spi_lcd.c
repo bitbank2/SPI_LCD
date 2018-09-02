@@ -37,6 +37,7 @@
 //#define USE_ORANGEPIZERO
 //#define USE_ORANGEPIONE
 //#define USE_BANANAPIM2ZERO
+//#define USE_BANANAPIM2MAGIC
 //#define USE_NANOPINEOCORE
 //#define USE_ORANGEPIZEROPLUS2
 
@@ -120,6 +121,10 @@ static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,0,-1,1,352,107,353,-1,3,
 #ifdef USE_BANANAPIM2ZERO
 static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,13,-1,14,1,110,0,-1,3,15,-1,68,64,-1,65,2,66,67,-1,71,19,18,7,-1,8,354,9,-1,10,356,17,21,-1,20};
 #endif // BPI-M2-Zero
+
+#ifdef USE_BANANAPIM2MAGIC
+static int iGenericPins[] = {-1,-1,-1,-1,-1,-1,-1,225,32,-1,33,230,203,231,-1,117,34,-1,35,64,-1,65,116,66,67,-1,121,115,120,114,-1,119,118,123,-1,202,122,363,205,-114,204};
+#endif // BPI-M2-Magic
 
 #ifdef USE_ORANGEPIONE
 static int iGenericPins[] = {-1,-1,-1,12,-1,11,-1,6,13,-1,14,1,110,0,-1,3,68,-1,71,64,-1,65,2,66,67,-1,21,19,18,7,-1,8,200,9,-1,10,201,20,198,-1,199};
