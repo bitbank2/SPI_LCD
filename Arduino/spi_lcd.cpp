@@ -184,7 +184,11 @@ static void myspiWrite(unsigned char *pBuf, int iLen)
 {
     myPinWrite(iCSPin, 0);
     SPI.beginTransaction(SPISettings(iSPISpeed, MSBFIRST, SPI_MODE0));
+#ifdef HAL_ESP32_HAL_H_
     SPI.transferBytes(pBuf, ucRXBuf, iLen);
+#else
+    SPI.transfer(pBuf, iLen);
+#endif
     SPI.endTransaction();
     myPinWrite(iCSPin, 1);
 } /* myspiWrite() */
