@@ -24,7 +24,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <spi_lcd.h>
+#include "spi_lcd.h"
 
 static unsigned char ucRXBuf[4096], ucTXBuf[4096]; // DEBUG - won't work on small AVR's
 extern unsigned char ucFont[];
