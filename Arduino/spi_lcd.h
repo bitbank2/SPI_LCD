@@ -19,6 +19,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+enum {
+  FONT_SMALL=0,
+  FONT_NORMAL,
+  FONT_STRETCHED,
+  FONT_LARGE
+};
+
 typedef enum
 {
  MODE_DATA = 0,
@@ -35,7 +42,7 @@ void spilcdSetMode(int iMode);
 int spilcdSetGamma(int iMode);
 
 // Initialize the library
-int spilcdInit(int iLCDType, int bFlipped, int iSPIFreq, int iCSPin, int iDCPin, int iResetPin, int iLEDPin);
+int spilcdInit(int iLCDType, int bFlipped, int32_t iSPIFreq, int iCSPin, int iDCPin, int iResetPin, int iLEDPin, int iMISOPin, int iMOSIPin, int iCLKPin);
 
 //
 // Initialize the touch controller
@@ -113,14 +120,14 @@ int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch);
 int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch);
 
 // Write a text string to the display at x (column 0-83) and y (row 0-5)
-// bLarge = 0 - 8x8 font, bLarge = 1 - 16x24 font
-int spilcdWriteString(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor, int bLarge);
+int spilcdWriteString(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor, int iFontSize);
 
 // Write a text string of 8x8 characters
 // quickly to the LCD with a single data block write.
-// This is necessary because there is a lot of latency between
-// writes when using the spidev kernel driver
-int spilcdWriteStringFast(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor);
+// This reduces the number of SPI transactions and speeds it up
+// This function only allows the FONT_NORMAL and FONT_SMALL sizes
+// 
+int spilcdWriteStringFast(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor, int iFontSize);
 
 // Sets a pixel to the given color
 // Coordinate system is pixels, not text rows (0-239, 0-319)
@@ -129,6 +136,8 @@ int spilcdSetPixel(int x, int y, unsigned short usPixel);
 // Set the software orientation
 int spilcdSetOrientation(int iOrientation);
 
+// Draw an ellipse with X and Y radius
+void spilcdEllipse(int32_t centerX, int32_t centerY, int32_t radiusX, int32_t radiusY, unsigned short color, int bFilled);
 //
 // Treat the LCD as a 240x320 portrait-mode image
 // or a 320x240 landscape mode image
@@ -144,6 +153,7 @@ int spilcdSetOrientation(int iOrientation);
 #define LCD_SSD1351 4
 #define LCD_ILI9342 5
 #define LCD_ST7789 6
+#define LCD_M5STICKC 7
 
 // touch panel types
 #define TOUCH_XPT2046 1
