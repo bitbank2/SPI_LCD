@@ -2353,3 +2353,104 @@ int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned ch
     myspiWrite(ucRXBuf, (iTileWidth*iTileHeight*9)/2, MODE_DATA);
     return 0;
 } /* spilcdDrawTile150() */
+
+//
+// Draw a line between 2 points using Bresenham's algorithm
+// An optimized version of the algorithm where each continuous run of pixels is written in a
+// single shot to reduce the total number of SPI transactions. Perfectly vertical or horizontal
+// lines are the most extreme version of this condition and will write the data in a single
+// operation.
+//
+void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
+{
+    int temp;
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+    int error;
+    int xinc, yinc;
+    int x, y;
+    uint16_t usTemp[320], us;
+
+    if (x1 < 0 || x2 < 0 || y1 < 0 || y2 < 0 || x1 >= iCurrentWidth || x2 >= iCurrentWidth || y1 >= iCurrentHeight || y2 >= iCurrentHeight)
+        return;
+    us = (usColor >> 8) | (usColor << 8); // byte swap for LCD byte order
+
+    if(abs(dx) > abs(dy)) {
+        // X major case
+        if(x2 < x1) {
+            dx = -dx;
+            temp = x1;
+            x1 = x2;
+            x2 = temp;
+            temp = y1;
+            y1 = y2;
+            y2 = temp;
+        }
+        for (x=0; x<dx+1; x++) // prepare color data for max length line
+            usTemp[x] = us;
+        y = y1;
+        dy = (y2 - y1);
+        error = dx >> 1;
+        yinc = 1;
+        if (dy < 0)
+        {
+            dy = -dy;
+            yinc = -1;
+        }
+        for(x = x1; x1 <= x2; x1++) {
+            error -= dy;
+            if (error < 0) // y needs to change, write existing pixels
+            {
+                error += dx;
+                spilcdSetPosition(x, y, (x1-x+1), 1);
+                myspiWrite((uint8_t*)usTemp, (x1-x+1)*2, MODE_DATA); // write the row we changed
+                x = x1+1; // we've already written the pixel at x1
+                y += yinc;
+            }
+        } // for x1
+        if (x != x1) // some data needs to be written
+        {
+            spilcdSetPosition(x, y, (x1-x+1), 1);
+            myspiWrite((uint8_t*)usTemp, (x1-x+1)*2, MODE_DATA); // write the row we changed
+        }
+    }
+    else {
+        // Y major case
+        if(y1 > y2) {
+            dy = -dy;
+            temp = x1;
+            x1 = x2;
+            x2 = temp;
+            temp = y1;
+            y1 = y2;
+            y2 = temp;
+        }
+        for (y=0; y<dy+1; y++) // prepare color data for max length line
+            usTemp[y] = us;
+
+        dx = (x2 - x1);
+        error = dy >> 1;
+        xinc = 1;
+        if (dx < 0)
+        {
+            dx = -dx;
+            xinc = -1;
+        }
+        x = x1;
+        for(y = y1; y1 <= y2; y1++) {
+            error -= dx;
+            if (error < 0) { // x needs to change, write any pixels we traversed
+                error += dy;
+                spilcdSetPosition(x, y, 1, (y1-y+1));
+                myspiWrite((uint8_t*)usTemp, (y1-y+1)*2, MODE_DATA); // write the row we changed
+                y = y1+1; // we've already written the pixel at y1
+                x += xinc;
+            }
+        } // for y
+        if (y != y1) // write the last byte we modified if it changed
+        {
+            spilcdSetPosition(x, y, 1, (y1-y+1));
+            myspiWrite((uint8_t*)usTemp, (y1-y+1)*2, MODE_DATA); // write the row we changed
+        }
+    } // y major case
+} /* spilcdDrawLine() */

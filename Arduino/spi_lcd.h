@@ -139,6 +139,11 @@ int spilcdSetOrientation(int iOrientation);
 // Draw an ellipse with X and Y radius
 void spilcdEllipse(int32_t centerX, int32_t centerY, int32_t radiusX, int32_t radiusY, unsigned short color, int bFilled);
 //
+// Draw a line between 2 points using Bresenham's algorithm
+// 
+void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor);
+
+//
 // Treat the LCD as a 240x320 portrait-mode image
 // or a 320x240 landscape mode image
 // This affects the coordinate system and rotates the
