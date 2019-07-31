@@ -42,7 +42,7 @@ void spilcdSetMode(int iMode);
 int spilcdSetGamma(int iMode);
 
 // Initialize the library
-int spilcdInit(int iLCDType, int bFlipped, int32_t iSPIFreq, int iCSPin, int iDCPin, int iResetPin, int iLEDPin, int iMISOPin, int iMOSIPin, int iCLKPin);
+int spilcdInit(int iLCDType, int bInvert, int bFlipped, int32_t iSPIFreq, int iCSPin, int iDCPin, int iResetPin, int iLEDPin, int iMISOPin, int iMOSIPin, int iCLKPin);
 
 //
 // Initialize the touch controller
@@ -142,6 +142,21 @@ void spilcdEllipse(int32_t centerX, int32_t centerY, int32_t radiusX, int32_t ra
 // Draw a line between 2 points using Bresenham's algorithm
 // 
 void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor);
+//
+// Public wrapper function to write data to the display
+//
+void spilcdWriteDataBlock(uint8_t *pData, int iLen);
+//
+// Position the "cursor" to the given
+// row and column. The width and height of the memory
+// 'window' must be specified as well. The controller
+// allows more efficient writing of small blocks (e.g. tiles)
+// by bounding the writes within a small area and automatically
+// wrapping the address when reaching the end of the window
+// on the curent row
+//
+void spilcdSetPosition(int x, int y, int w, int h);
+
 
 //
 // Treat the LCD as a 240x320 portrait-mode image
@@ -152,13 +167,17 @@ void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor);
 #define LCD_ORIENTATION_NATIVE 1
 #define LCD_ORIENTATION_ROTATED 2
 
-#define LCD_ILI9341 1
-#define LCD_HX8357 2
-#define LCD_ST7735 3
-#define LCD_SSD1351 4
-#define LCD_ILI9342 5
-#define LCD_ST7789 6
-#define LCD_M5STICKC 7
+enum {
+   LCD_INVALID=0,
+   LCD_ILI9341,
+   LCD_HX8357,
+   LCD_ST7735R, // 128x160
+   LCD_ST7735S, // 80x160
+   LCD_SSD1351,
+   LCD_ILI9342,
+   LCD_ST7789   // 240x240
+};
+
 
 // touch panel types
 #define TOUCH_XPT2046 1
