@@ -846,7 +846,7 @@ unsigned char *s;
 int i, iCount;
    
 	iLEDPin = -1; // assume it's not defined
-	if (iType != LCD_ILI9341 && iType != LCD_ST7735S && iType != LCD_ST7735R && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735S && iType != LCD_ST7735R && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789 && iType != LCD_ST7789_135)
 	{
 		Serial.println("Unsupported display type\n");
 		return -1;
@@ -926,15 +926,23 @@ int i, iCount;
 	delayMicroseconds(60000);
     delayMicroseconds(60000);
 	}
-	if (iLCDType == LCD_ST7789)
+	if (iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
 	{
 		s = uc240x240InitList;
 		if (bFlipped)
 			s[6] = 0xc0; // flip 180
 		else
 			s[6] = 0x00;
-		iCurrentWidth = iWidth = 240;
-		iCurrentHeight = iHeight = 240;
+		if (iLCDType == LCD_ST7789)
+		{
+			iCurrentWidth = iWidth = 240;
+			iCurrentHeight = iHeight = 240;
+		}
+		else
+		{
+			iCurrentWidth = iWidth = 135;
+			iCurrentHeight = iHeight = 240;
+		}
 	} // ST7789
 	else if (iLCDType == LCD_SSD1351)
 	{
@@ -1074,7 +1082,7 @@ void spilcdScroll(int iLines, int iFillColor)
 	else
 	{
 		spilcdWriteCommand(0x37); // Vertical scrolling start address
-		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7735S)
+		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135 || iLCDType == LCD_ST7735S)
 		{
 			spilcdWriteData16(iScrollOffset);
 		}
@@ -1280,12 +1288,14 @@ unsigned char ucBuf[8];
 		return;
 	}
 	spilcdWriteCommand(0x2a); // set column address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
 	{
+                if (iLCDType == LCD_ST7789_135)
+                        x += 52;
 		ucBuf[0] = (unsigned char)(x >> 8);
 		ucBuf[1] = (unsigned char)x;
 		x = x + w - 1;
-		if (x > iWidth-1) x = iWidth-1;
+		if (iLCDType != LCD_ST7789_135 && x > iWidth-1) x = iWidth-1;
 		ucBuf[2] = (unsigned char)(x >> 8);
 		ucBuf[3] = (unsigned char)x; 
 		myspiWrite(ucBuf, 4, MODE_DATA);
@@ -1318,12 +1328,14 @@ unsigned char ucBuf[8];
 		myspiWrite(ucBuf, 8, MODE_DATA);
 	}
 	spilcdWriteCommand(0x2b); // set row address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7735S || iLCDType == LCD_ST7789)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7735S || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
 	{
+                if (iLCDType == LCD_ST7789_135)
+                        y += 40;
 		ucBuf[0] = (unsigned char)(y >> 8);
 		ucBuf[1] = (unsigned char)y;
 		y = y + h - 1;
-		if (y > iHeight-1) y = iHeight-1;
+		if (iLCDType != LCD_ST7789_135 && y > iHeight-1) y = iHeight-1;
 		ucBuf[2] = (unsigned char)(y >> 8);
 		ucBuf[3] = (unsigned char)y;
 		myspiWrite(ucBuf, 4, MODE_DATA);
@@ -2540,3 +2552,71 @@ void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
         }
     } // y major case
 } /* spilcdDrawLine() */
+
+//
+// Load a RGB565 bitmap onto the display
+// Pass the pointer to the beginning of the BMP file
+// Optionally stretch to 2x size
+// returns -1 for error, 0 for success
+//
+int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch)
+{
+    int iOffBits, iPitch;
+    int16_t cx, cy, bpp, y; // offset to bitmap data
+    int j, x;
+    uint16_t *pus, us, *d, usTemp[320]; // process a line at a time
+    uint8_t bFlipped = false;
+    
+    if (pBMP[0] != 'B' || pBMP[1] != 'M') // must start with 'BM'
+        return -1; // not a BMP file
+    cx = pBMP[18] | pBMP[19]<<8;
+    cy = pBMP[22] | pBMP[23]<<8;
+    if (cy > 0) // BMP is flipped vertically (typical)
+        bFlipped = true;
+    else
+        cy = -cy;
+    bpp = pBMP[28] | pBMP[29]<<8;
+    if (bpp != 16) // must be 16 bits per pixel
+        return -1;
+    iOffBits = pBMP[10] | pBMP[11]<<8;
+    iPitch = ((cx * 2) + 3) & 0xfffc; // must be a multiple of 4 bytes
+    if (bFlipped)
+    {
+        iOffBits += (cy-1) * iPitch; // start from bottom
+	iPitch = -iPitch;
+    }
+    if (bStretch)
+    {
+        spilcdSetPosition(iDestX, iDestY, cx*2, cy*2);
+        for (y=0; y<cy; y++)
+        {
+            pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
+            for (j=0; j<2; j++) // for systems without half-duplex, we need to prepare the data for each write
+            {
+                d = usTemp;
+                for (x=0; x<cx; x++)
+                {
+                    us = pus[x];
+                    d[0] = d[1] = (us >> 8) | (us << 8); // swap byte order
+                    d += 2;
+                } // for x
+                spilcdWriteDataBlock((uint8_t *)usTemp, cx*4); // write the same line twice
+            } // for j
+        } // for y
+    } // 2:1
+    else // 1:1
+    {
+        spilcdSetPosition(iDestX, iDestY, cx, cy);
+        for (y=0; y<cy; y++)
+        {
+            pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
+            for (x=0; x<cx; x++)
+            {
+               us = *pus++;
+               usTemp[x] = (us >> 8) | (us << 8); // swap byte order
+            }
+            spilcdWriteDataBlock((uint8_t *)usTemp, cx*2);
+        } // for y
+    } // 1:1
+    return 0;
+} /* spilcdLoadBMP() */

@@ -19,12 +19,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+// these are defined the same in the OLED library
+#ifndef __SS_OLED_H__
 enum {
-  FONT_SMALL=0,
-  FONT_NORMAL,
-  FONT_STRETCHED,
-  FONT_LARGE
+  FONT_NORMAL=0,
+  FONT_LARGE,
+  FONT_SMALL,
+  FONT_STRETCHED
 };
+#endif
 
 typedef enum
 {
@@ -156,7 +159,13 @@ void spilcdWriteDataBlock(uint8_t *pData, int iLen);
 // on the curent row
 //
 void spilcdSetPosition(int x, int y, int w, int h);
-
+//
+// Load a RGB565 bitmap onto the display
+// Pass the pointer to the beginning of the BMP file
+// Optionally stretch to 2x size
+// returns -1 for error, 0 for success
+//
+int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch);
 
 //
 // Treat the LCD as a 240x320 portrait-mode image
@@ -175,7 +184,8 @@ enum {
    LCD_ST7735S, // 80x160
    LCD_SSD1351,
    LCD_ILI9342,
-   LCD_ST7789   // 240x240
+   LCD_ST7789,  // 240x240
+   LCD_ST7789_135 // 135x240
 };
 
 
