@@ -718,6 +718,7 @@ static unsigned char uc480InitList[] = {
 //
 static void myspiWrite(unsigned char *pBuf, int iLen, int iMode)
 {
+    myPinWrite(iCSPin, 0);
 #ifdef ESP32_DMA
     esp_err_t ret;
 static spi_transaction_t t;
@@ -735,7 +736,6 @@ static spi_transaction_t t;
 #else
     if (iMode == MODE_COMMAND)
         spilcdSetMode(MODE_COMMAND);
-    myPinWrite(iCSPin, 0);
     SPI.beginTransaction(SPISettings(iSPISpeed, MSBFIRST, SPI_MODE0));
 #ifdef HAL_ESP32_HAL_H_
     SPI.transferBytes(pBuf, ucRXBuf, iLen);
@@ -743,10 +743,10 @@ static spi_transaction_t t;
     SPI.transfer(pBuf, iLen);
 #endif
     SPI.endTransaction();
-    myPinWrite(iCSPin, 1);
     if (iMode == MODE_COMMAND) // restore D/C pin to DATA
         spilcdSetMode(MODE_DATA);
 #endif
+    myPinWrite(iCSPin, 1);
 } /* myspiWrite() */
 
 //
@@ -2583,40 +2583,83 @@ int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch)
     if (bFlipped)
     {
         iOffBits += (cy-1) * iPitch; // start from bottom
-	iPitch = -iPitch;
+        iPitch = -iPitch;
     }
-    if (bStretch)
+    // Handle the 2 LCD orientations. The LCD memory is always the same, so I need to write
+    // the pixels differently when the display is rotated
+    if (iOrientation == LCD_ORIENTATION_ROTATED)
     {
-        spilcdSetPosition(iDestX, iDestY, cx*2, cy*2);
-        for (y=0; y<cy; y++)
+        if (bStretch)
         {
-            pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
-            for (j=0; j<2; j++) // for systems without half-duplex, we need to prepare the data for each write
-            {
-                d = usTemp;
-                for (x=0; x<cx; x++)
-                {
-                    us = pus[x];
-                    d[0] = d[1] = (us >> 8) | (us << 8); // swap byte order
-                    d += 2;
-                } // for x
-                spilcdWriteDataBlock((uint8_t *)usTemp, cx*4); // write the same line twice
-            } // for j
-        } // for y
-    } // 2:1
-    else // 1:1
-    {
-        spilcdSetPosition(iDestX, iDestY, cx, cy);
-        for (y=0; y<cy; y++)
-        {
-            pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
+            int iUSPitch = iPitch >> 1; // modify to index shorts
+            spilcdSetPosition(iDestX, iDestY, cx*2, cy*2);
             for (x=0; x<cx; x++)
             {
-               us = *pus++;
-               usTemp[x] = (us >> 8) | (us << 8); // swap byte order
-            }
-            spilcdWriteDataBlock((uint8_t *)usTemp, cx*2);
-        } // for y
-    } // 1:1
+                pus = (uint16_t *)&pBMP[iOffBits + x*2]; // source line
+                for (j=0; j<2; j++) // for systems without half-duplex, we need to prepare the data for each write
+                {
+                    d = usTemp;
+                    for (y=0; y<cy; y++)
+                    {
+                        us = pus[y*iUSPitch];
+                        d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = (us >> 8) | (us << 8); // swap byte order
+                    } // for y
+                    spilcdWriteDataBlock((uint8_t *)usTemp, cy*4); // write the same line twice
+                } // for j
+            } // for x
+        } // 2:1
+        else // 1:1
+        {
+            int iUSPitch = iPitch >> 1; // modify to index shorts
+            spilcdSetPosition(iDestX, iDestY, cx, cy);
+            for (x=0; x<cx; x++)
+            {
+                pus = (uint16_t *)&pBMP[iOffBits + x*2];
+                for (y=0; y<cy; y++)
+                {
+                    us = pus[0];
+                    usTemp[cy-1-y] = (us >> 8) | (us << 8); // swap byte order
+                    pus += iUSPitch;
+                }
+                spilcdWriteDataBlock((uint8_t *)usTemp, cy*2);
+            } // for x
+        } // 1:1    } // rotated 90
+    }
+    else // non-rotated
+    {
+        if (bStretch)
+        {
+            spilcdSetPosition(iDestX, iDestY, cx*2, cy*2);
+            for (y=0; y<cy; y++)
+            {
+                pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
+                for (j=0; j<2; j++) // for systems without half-duplex, we need to prepare the data for each write
+                {
+                    d = usTemp;
+                    for (x=0; x<cx; x++)
+                    {
+                        us = pus[x];
+                        d[0] = d[1] = (us >> 8) | (us << 8); // swap byte order
+                        d += 2;
+                    } // for x
+                    spilcdWriteDataBlock((uint8_t *)usTemp, cx*4); // write the same line twice
+                } // for j
+            } // for y
+        } // 2:1
+        else // 1:1
+        {
+            spilcdSetPosition(iDestX, iDestY, cx, cy);
+            for (y=0; y<cy; y++)
+            {
+                pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
+                for (x=0; x<cx; x++)
+                {
+                   us = *pus++;
+                   usTemp[x] = (us >> 8) | (us << 8); // swap byte order
+                }
+                spilcdWriteDataBlock((uint8_t *)usTemp, cx*2);
+            } // for y
+        } // 1:1
+    } // non-rotated
     return 0;
 } /* spilcdLoadBMP() */
