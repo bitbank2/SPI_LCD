@@ -62,12 +62,17 @@ static int iOrientation = LCD_ORIENTATION_NATIVE; // default to 'natural' orient
 static int iLCDType;
 static int iWidth, iHeight;
 static int iCurrentWidth, iCurrentHeight; // reflects virtual size due to orientation
-
+// For back buffer support
+static int iScreenPitch, iOffset;
+static uint8_t *pBackBuffer = NULL;
+static int iWindowX, iWindowY, iCurrentX, iCurrentY;
+static int iWindowCX, iWindowCY;
+static int bSetPosition = 0; // flag telling myspiWrite() to ignore data writes to memory
 static void spilcdWriteCommand(unsigned char);
 static void spilcdWriteData8(unsigned char c);
-static void spilcdWriteData16(unsigned short us);
-void spilcdSetPosition(int x, int y, int w, int h);
-int spilcdFill(unsigned short usData);
+static void spilcdWriteData16(unsigned short us, int bRender);
+void spilcdSetPosition(int x, int y, int w, int h, int bRender);
+int spilcdFill(unsigned short usData, int bRender);
 
 // small (8x8) font
 const uint8_t ucFont[]PROGMEM = {
@@ -716,9 +721,45 @@ static unsigned char uc480InitList[] = {
 //
 // Wrapper function for writing to SPI
 //
-static void myspiWrite(unsigned char *pBuf, int iLen, int iMode)
+static void myspiWrite(unsigned char *pBuf, int iLen, int iMode, int bRender)
 {
-    myPinWrite(iCSPin, 0);
+    if (iMode == MODE_DATA && pBackBuffer != NULL && !bSetPosition) // write it to the back buffer
+    {
+        uint16_t *s, *d;
+        int j, iOff, iStrip, iMaxX, iMaxY, i;
+        iMaxX = iWindowX + iWindowCX;
+        iMaxY = iWindowY + iWindowCY;
+        iOff = 0;
+        i = iLen/2;
+        while (i > 0)
+        {
+            iStrip = iMaxX - iCurrentX; // max pixels that can be written in one shot
+            if (iStrip > i)
+                iStrip = i;
+            s = (uint16_t *)&pBuf[iOff];
+            d = (uint16_t *)&pBackBuffer[iOffset];
+            for (j=0; j<iStrip; j++) // memcpy could be much slower for small runs
+            {
+                *d++ = *s++;
+            }
+            iOffset += iStrip*2; iOff += iStrip*2;
+            i -= iStrip;
+            iCurrentX += iStrip;
+            if (iCurrentX >= iMaxX) // need to wrap around to the next line
+            {
+                iCurrentX = iWindowX;
+                iCurrentY++;
+                if (iCurrentY >= iMaxY)
+                    iCurrentY = iWindowY;
+                iOffset = (iScreenPitch * iCurrentY) + (iCurrentX * 2);
+            }
+        }
+    }
+    if (!bRender)
+        return; // don't write it to the display
+    
+    if (iCSPin != -1)
+        myPinWrite(iCSPin, 0);
 #ifdef ESP32_DMA
     esp_err_t ret;
 static spi_transaction_t t;
@@ -746,15 +787,16 @@ static spi_transaction_t t;
     if (iMode == MODE_COMMAND) // restore D/C pin to DATA
         spilcdSetMode(MODE_DATA);
 #endif
-    myPinWrite(iCSPin, 1);
+    if (iCSPin != -1)
+        myPinWrite(iCSPin, 1);
 } /* myspiWrite() */
 
 //
 // Public wrapper function to write data to the display
 //
-void spilcdWriteDataBlock(uint8_t *pData, int iLen)
+void spilcdWriteDataBlock(uint8_t *pData, int iLen, int bRender)
 {
-  myspiWrite(pData, iLen, MODE_DATA);
+  myspiWrite(pData, iLen, MODE_DATA, bRender);
 } /* spilcdWriteDataBlock() */
 
 //
@@ -979,8 +1021,8 @@ int i, iCount;
 	else if (iLCDType == LCD_HX8357)
 	{
                 spilcdWriteCommand(0xb0);
-                spilcdWriteData16(0x00FF);
-                spilcdWriteData16(0x0001);
+                spilcdWriteData16(0x00FF, 1);
+                spilcdWriteData16(0x0001, 1);
                 delayMicroseconds(60000);
 
 		s = uc480InitList;
@@ -1016,6 +1058,7 @@ int i, iCount;
 		iCurrentHeight = iHeight = 160;
 	}
 	iCount = 1;
+    bSetPosition = 1; // don't let the data writes affect RAM
 	while (iCount)
 	{
 		iCount = *s++;
@@ -1028,6 +1071,7 @@ int i, iCount;
 			}
 		}
 	}
+    bSetPosition = 0;
 	if (iLCDType != LCD_SSD1351)
 	{
 		spilcdWriteCommand(0x11); // sleep out
@@ -1036,7 +1080,7 @@ int i, iCount;
 		delayMicroseconds(10000);
 	}
 
-	spilcdFill(0); // erase memory
+	spilcdFill(0, 1); // erase memory
 	spilcdScrollReset();
    
 	return 0;
@@ -1058,10 +1102,10 @@ void spilcdScrollReset(void)
 		return;
 	}
 	spilcdWriteCommand(0x37); // scroll start address
-	spilcdWriteData16(0);
+	spilcdWriteData16(0, 1);
 	if (iLCDType == LCD_HX8357)
 	{
-		spilcdWriteData16(0);
+		spilcdWriteData16(0, 1);
 	}
 } /* spilcdScrollReset() */
 
@@ -1084,12 +1128,12 @@ void spilcdScroll(int iLines, int iFillColor)
 		spilcdWriteCommand(0x37); // Vertical scrolling start address
 		if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135 || iLCDType == LCD_ST7735S)
 		{
-			spilcdWriteData16(iScrollOffset);
+			spilcdWriteData16(iScrollOffset, 1);
 		}
 		else
 		{
-			spilcdWriteData16(iScrollOffset >> 8);
-			spilcdWriteData16(iScrollOffset & -1);
+			spilcdWriteData16(iScrollOffset >> 8, 1);
+			spilcdWriteData16(iScrollOffset & -1, 1);
 		}
 	}
 	if (iFillColor != -1) // fill the exposed lines
@@ -1112,85 +1156,156 @@ void spilcdScroll(int iLines, int iFillColor)
 		else
 			iStart = iHeight - iLines;
 		if (iOrientation == LCD_ORIENTATION_ROTATED)
-			spilcdSetPosition(iStart, iWidth-1, iLines, iWidth);
+			spilcdSetPosition(iStart, iWidth-1, iLines, iWidth, 1);
 		else
-			spilcdSetPosition(0, iStart, iWidth, iLines);
+			spilcdSetPosition(0, iStart, iWidth, iLines, 1);
 		for (i=0; i<iLines; i++)
 		{
-			myspiWrite((unsigned char *)usTemp, iWidth*2, MODE_DATA);
+			myspiWrite((unsigned char *)usTemp, iWidth*2, MODE_DATA, 1);
 		}
 	}
 
 } /* spilcdScroll() */
 
-void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor, int bFill)
+void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor1, unsigned short usColor2, int bFill, int bRender)
 {
 unsigned short *usTemp = (unsigned short *)ucRXBuf;
-int i, ty, th, iPerLine, iStart;
+int i, j, ty, th, iPerLine, iStart;
 
 	// check bounds
 	if (x < 0 || x >= iCurrentWidth || x+w > iCurrentWidth)
 		return; // out of bounds
 	if (y < 0 || y >= iCurrentHeight || y+h > iCurrentHeight)
 		return;
-	usColor = (usColor >> 8) | (usColor << 8); // swap byte order
-	for (i=0; i<480; i++) // prepare big buffer of color
-		usTemp[i] = usColor;
 
 	ty = (iCurrentWidth == iWidth) ? y:x;
 	th = (iCurrentWidth == iWidth) ? h:w;
 	if (bFill)
 	{
-		iPerLine = (iCurrentWidth == iWidth) ? w*2:h*2; // bytes to write per line
-	       	spilcdSetPosition(x, y, w, h);
-	        if (((ty + iScrollOffset) % iHeight) > iHeight-th) // need to write in 2 parts since it won't wrap
-		{
-               		iStart = (iHeight - ((ty+iScrollOffset) % iHeight));
-			for (i=0; i<iStart; i++)
-                		myspiWrite((unsigned char *)usTemp, iStart*iPerLine, MODE_DATA); // first N lines
-			if (iCurrentWidth == iWidth)
-				spilcdSetPosition(x, y+iStart, w, h-iStart);
-			else
-				spilcdSetPosition(x+iStart, y, w-iStart, h);
-			for (i=0; i<th-iStart; i++)
-               	 		myspiWrite((unsigned char *)usTemp, iPerLine, MODE_DATA);
-       		 }
-        	else // can write in one shot
-        	{
+        int32_t iDR, iDG, iDB; // current colors and deltas
+        int32_t iRAcc, iGAcc, iBAcc;
+        uint16_t usColor, usRInc, usGInc, usBInc;
+        iRAcc = iGAcc = iBAcc = 0; // color fraction accumulators
+        iDB = (int32_t)(usColor2 & 0x1f) - (int32_t)(usColor1 & 0x1f); // color deltas
+        usBInc = (iDB < 0) ? 0xffff : 0x0001;
+        iDB = abs(iDB);
+        iDR = (int32_t)(usColor2 >> 11) - (int32_t)(usColor1 >> 11);
+        usRInc = (iDR < 0) ? 0xf800 : 0x0800;
+        iDR = abs(iDR);
+        iDG = (int32_t)((usColor2 & 0x06e0) >> 5) - (int32_t)((usColor1 & 0x06e0) >> 5);
+        usGInc = (iDG < 0) ? 0xffe0 : 0x0020;
+        iDG = abs(iDG);
+        iDB = (iDB << 16) / th;
+        iDR = (iDR << 16) / th;
+        iDG = (iDG << 16) / th;
+		iPerLine = (iCurrentWidth == iWidth) ? w:h; // line length
+        spilcdSetPosition(x, y, w, h, bRender);
+//	        if (((ty + iScrollOffset) % iHeight) > iHeight-th) // need to write in 2 parts since it won't wrap
+//		{
+//          	iStart = (iHeight - ((ty+iScrollOffset) % iHeight));
+//			for (i=0; i<iStart; i++)
+//           		myspiWrite((unsigned char *)usTemp, iStart*iPerLine, MODE_DATA, bRender); // first N lines
+//			if (iCurrentWidth == iWidth)
+//				spilcdSetPosition(x, y+iStart, w, h-iStart, bRender);
+//			else
+//				spilcdSetPosition(x+iStart, y, w-iStart, h, bRender);
+//			for (i=0; i<th-iStart; i++)
+ //         		myspiWrite((unsigned char *)usTemp, iPerLine, MODE_DATA, bRender);
+//       		 }
+//        	else // can write in one shot
+//        	{
 			for (i=0; i<th; i++)
-               		 	myspiWrite((unsigned char *)usTemp, iPerLine, MODE_DATA);
-        	}
+            {
+                usColor = (usColor1 >> 8) | (usColor1 << 8); // swap byte order
+                for (j=0; j<iPerLine; j++) // prepare big buffer of color
+                    usTemp[j] = usColor;
+                myspiWrite((unsigned char *)usTemp, iPerLine*2, MODE_DATA, bRender);
+                // Update the color components
+                iRAcc += iDR;
+                if (iRAcc >= 0x10000) // time to increment
+                {
+                    usColor1 += usRInc;
+                    iRAcc -= 0x10000;
+                }
+                iGAcc += iDG;
+                if (iGAcc >= 0x10000) // time to increment
+                {
+                    usColor1 += usGInc;
+                    iGAcc -= 0x10000;
+                }
+                iBAcc += iDB;
+                if (iBAcc >= 0x10000) // time to increment
+                {
+                    usColor1 += usBInc;
+                    iBAcc -= 0x10000;
+                }
+            }
+//        	}
 	}
 	else // outline
 	{
 		// draw top/bottom
-		spilcdSetPosition(x, y, w, 1);
-		myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA);
-		spilcdSetPosition(x, y + h-1, w, 1);
-		myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA);
+		spilcdSetPosition(x, y, w, 1, bRender);
+		myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA, bRender);
+		spilcdSetPosition(x, y + h-1, w, 1, bRender);
+		myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA, bRender);
 		// draw left/right
 		if (((ty + iScrollOffset) % iHeight) > iHeight-th)	
 		{
 			iStart = (iHeight - ((ty+iScrollOffset) % iHeight));
-			spilcdSetPosition(x, y, 1, iStart);
-			myspiWrite((unsigned char *)usTemp, iStart*2, MODE_DATA);
-			spilcdSetPosition(x+w-1, y, 1, iStart);
-			myspiWrite((unsigned char *)usTemp, iStart*2, MODE_DATA);
+			spilcdSetPosition(x, y, 1, iStart, bRender);
+			myspiWrite((unsigned char *)usTemp, iStart*2, MODE_DATA, bRender);
+			spilcdSetPosition(x+w-1, y, 1, iStart, bRender);
+			myspiWrite((unsigned char *)usTemp, iStart*2, MODE_DATA, bRender);
 			// second half
-			spilcdSetPosition(x,y+iStart, 1, h-iStart);
-			myspiWrite((unsigned char *)usTemp, (h-iStart)*2, MODE_DATA);
-			spilcdSetPosition(x+w-1, y+iStart, 1, h-iStart);
-			myspiWrite((unsigned char *)usTemp, (h-iStart)*2, MODE_DATA);
+			spilcdSetPosition(x,y+iStart, 1, h-iStart, bRender);
+			myspiWrite((unsigned char *)usTemp, (h-iStart)*2, MODE_DATA, bRender);
+			spilcdSetPosition(x+w-1, y+iStart, 1, h-iStart, bRender);
+			myspiWrite((unsigned char *)usTemp, (h-iStart)*2, MODE_DATA, bRender);
 		}
 		else // can do it in 1 shot
 		{
-			spilcdSetPosition(x, y, 1, h);
-			myspiWrite((unsigned char *)usTemp, h*2, MODE_DATA);
-			spilcdSetPosition(x + w-1, y, 1, h);
-			myspiWrite((unsigned char *)usTemp, h*2, MODE_DATA);
+			spilcdSetPosition(x, y, 1, h, bRender);
+			myspiWrite((unsigned char *)usTemp, h*2, MODE_DATA, bRender);
+			spilcdSetPosition(x + w-1, y, 1, h, bRender);
+			myspiWrite((unsigned char *)usTemp, h*2, MODE_DATA, bRender);
 		}
 	} // outline
 } /* spilcdRectangle() */
+
+//
+// Show part or all of the back buffer on the display
+// Used after delayed rendering of graphics
+//
+void spilcdShowBuffer(int iStartX, int iStartY, int cx, int cy)
+{
+    int x, y;
+    uint8_t *s;
+    
+    if (pBackBuffer == NULL)
+        return; // nothing to do
+    if (iStartX + cx > iCurrentWidth || iStartY + cy > iCurrentHeight || iStartX < 0 || iStartY < 0)
+        return; // invalid area
+    spilcdSetPosition(iStartX, iStartY, cx, cy, 1);
+    bSetPosition = 1;
+    if (iOrientation == LCD_ORIENTATION_ROTATED) // coordinates are swapped
+    {
+        for (x=iStartX; x<iStartX+cx; x++)
+        {
+            s = &pBackBuffer[(x * iScreenPitch) + (iCurrentHeight - iStartY-cy-1)*2];
+            myspiWrite(s, cy * 2, MODE_DATA, 1);
+        }
+    }
+    else // normal orientation
+    {
+        for (y=iStartY; y<iStartY+cy; y++)
+        {
+            s = &pBackBuffer[(y * iScreenPitch) + iStartX*2];
+            myspiWrite(s, cx * 2, MODE_DATA, 1);
+        }
+    } // normal orientation
+    bSetPosition = 0;
+} /* spilcdShowBuffer() */
 
 //
 // Sends a command to turn off the LCD display
@@ -1205,6 +1320,7 @@ void spilcdShutdown(void)
 		spilcdWriteCommand(0x29); // Display OFF
 	if (iLEDPin != -1)
 		myPinWrite(iLEDPin, 0); // turn off the backlight
+    spilcdFreeBackbuffer();
 } /* spilcdShutdown() */
 
 //
@@ -1217,7 +1333,7 @@ static void spilcdWriteCommand(unsigned char c)
 unsigned char buf[2];
 
 	buf[0] = c;
-	myspiWrite(buf, 1, MODE_COMMAND);
+	myspiWrite(buf, 1, MODE_COMMAND, 1);
 } /* spilcdWriteCommand() */
 
 //
@@ -1228,7 +1344,7 @@ static void spilcdWriteData8(unsigned char c)
 unsigned char buf[2];
 
 	buf[0] = c;
-    myspiWrite(buf, 1, MODE_DATA);
+    myspiWrite(buf, 1, MODE_DATA, 1);
 
 } /* spilcdWriteData8() */
 
@@ -1237,13 +1353,13 @@ unsigned char buf[2];
 // The ILI9341 receives data in big-endian order
 // (MSB first)
 //
-static void spilcdWriteData16(unsigned short us)
+static void spilcdWriteData16(unsigned short us, int bRender)
 {
 unsigned char buf[2];
 
     buf[0] = (unsigned char)(us >> 8);
     buf[1] = (unsigned char)us;
-    myspiWrite(buf, 2, MODE_DATA);
+    myspiWrite(buf, 2, MODE_DATA, bRender);
 
 } /* spilcdWriteData16() */
 
@@ -1256,7 +1372,7 @@ unsigned char buf[2];
 // wrapping the address when reaching the end of the window
 // on the curent row
 //
-void spilcdSetPosition(int x, int y, int w, int h)
+void spilcdSetPosition(int x, int y, int w, int h, int bRender)
 {
 unsigned char ucBuf[8];
 
@@ -1272,19 +1388,27 @@ unsigned char ucBuf[8];
 		w = h;
 		h = t;
 	}
-	y = (y + iScrollOffset) % iHeight; // scroll offset affects writing position
+    iWindowX = iCurrentX = x; iWindowY = iCurrentY = y;
+    iWindowCX = w; iWindowCY = h;
+    iOffset = (iScreenPitch * y) + (x * 2);
+
+    if (!bRender) return; // nothing to do
+
+    bSetPosition = 1; // flag to let myspiWrite know to ignore data writes
+    y = (y + iScrollOffset) % iHeight; // scroll offset affects writing position
 
 	if (iLCDType == LCD_SSD1351) // OLED has very different commands
 	{
 		spilcdWriteCommand(0x15); // set column
 		ucBuf[0] = x;
 		ucBuf[1] = x + w - 1;
-		myspiWrite(ucBuf, 2, MODE_DATA);
+		myspiWrite(ucBuf, 2, MODE_DATA, 1);
 		spilcdWriteCommand(0x75); // set row
 		ucBuf[0] = y;
 		ucBuf[1] = y + h - 1;
-		myspiWrite(ucBuf, 2, MODE_DATA);
+		myspiWrite(ucBuf, 2, MODE_DATA, 1);
 		spilcdWriteCommand(0x5c); // write RAM
+        bSetPosition = 0;
 		return;
 	}
 	spilcdWriteCommand(0x2a); // set column address
@@ -1298,7 +1422,7 @@ unsigned char ucBuf[8];
 		if (iLCDType != LCD_ST7789_135 && x > iWidth-1) x = iWidth-1;
 		ucBuf[2] = (unsigned char)(x >> 8);
 		ucBuf[3] = (unsigned char)x; 
-		myspiWrite(ucBuf, 4, MODE_DATA);
+		myspiWrite(ucBuf, 4, MODE_DATA, 1);
 	}
     else if (iLCDType == LCD_ST7735S)
     {
@@ -1310,7 +1434,7 @@ unsigned char ucBuf[8];
         if (x > 127) x = 127; // memory width
         ucBuf[2] = (unsigned char)(x >> 8);
         ucBuf[3] = (unsigned char)x;
-        myspiWrite(ucBuf, 4, MODE_DATA);
+        myspiWrite(ucBuf, 4, MODE_DATA, 1);
     }
 	else
 	{
@@ -1325,7 +1449,7 @@ unsigned char ucBuf[8];
 		ucBuf[5] = (unsigned char)(x >> 8);
 		ucBuf[6] = 0;
 		ucBuf[7] = (unsigned char)x;
-		myspiWrite(ucBuf, 8, MODE_DATA);
+		myspiWrite(ucBuf, 8, MODE_DATA, 1);
 	}
 	spilcdWriteCommand(0x2b); // set row address
 	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7735S || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
@@ -1338,7 +1462,7 @@ unsigned char ucBuf[8];
 		if (iLCDType != LCD_ST7789_135 && y > iHeight-1) y = iHeight-1;
 		ucBuf[2] = (unsigned char)(y >> 8);
 		ucBuf[3] = (unsigned char)y;
-		myspiWrite(ucBuf, 4, MODE_DATA);
+		myspiWrite(ucBuf, 4, MODE_DATA, 1);
 	}
 	else
 	{
@@ -1353,19 +1477,20 @@ unsigned char ucBuf[8];
 		ucBuf[5] = (unsigned char)(y >> 8);
 		ucBuf[6] = 0;
 		ucBuf[7] = (unsigned char)y;
-		myspiWrite(ucBuf, 8, MODE_DATA);
+		myspiWrite(ucBuf, 8, MODE_DATA, 1);
 	}
 	spilcdWriteCommand(0x2c); // write memory begin
 //	spilcdWriteCommand(0x3c); // write memory continue
+    bSetPosition = 0;
 } /* spilcdSetPosition() */
 
 //
 // Draw an individual RGB565 pixel
 //
-int spilcdSetPixel(int x, int y, unsigned short usColor)
+int spilcdSetPixel(int x, int y, unsigned short usColor, int bRender)
 {
-	spilcdSetPosition(x, y, 1, 1);
-	spilcdWriteData16(usColor);
+	spilcdSetPosition(x, y, 1, 1, bRender);
+	spilcdWriteData16(usColor, bRender);
 	return 0;
 } /* spilcdSetPixel() */
 
@@ -1450,11 +1575,11 @@ uint8_t *pFont;
             {
 #ifdef ESP32_DMA
                 spilcdWaitDMA();
-                spilcdSetPosition(x, y, cx*iChars, 8);
+                spilcdSetPosition(x, y, cx*iChars, 8, 1);
                 spilcdWriteDataDMA(iChars*cx*16);
 #else
-                spilcdSetPosition(x, y, cx*iChars, 8);
-                myspiWrite(ucTXBuf, iChars*cx*16, MODE_DATA);
+                spilcdSetPosition(x, y, cx*iChars, 8, 1);
+                myspiWrite(ucTXBuf, iChars*cx*16, MODE_DATA, 1);
 #endif
                 x += iChars*cx;
                 iChars = 0;
@@ -1464,11 +1589,11 @@ uint8_t *pFont;
         {
 #ifdef ESP32_DMA
             spilcdWaitDMA();
-            spilcdSetPosition(x, y, cx*iChars, 8);
+            spilcdSetPosition(x, y, cx*iChars, 8, 1);
             spilcdWriteDataDMA(iChars*cx*16);
 #else
-            spilcdSetPosition(x, y, cx*iChars, 8);
-            myspiWrite(ucTXBuf, iChars*cx*16, MODE_DATA);
+            spilcdSetPosition(x, y, cx*iChars, 8, 1);
+            myspiWrite(ucTXBuf, iChars*cx*16, MODE_DATA, 1);
 #endif
         }
     } // landscape
@@ -1496,11 +1621,11 @@ uint8_t *pFont;
         // write the data in one shot
 #ifdef ESP32_DMA
         spilcdWaitDMA();
-        spilcdSetPosition(x, y, cx*iLen, 8);
+        spilcdSetPosition(x, y, cx*iLen, 8, 1);
         spilcdWriteDataDMA(iLen*cx*16);
 #else
-        spilcdSetPosition(x, y, cx*iLen, 8);
-        myspiWrite(ucTXBuf, iLen*cx*16, MODE_DATA);
+        spilcdSetPosition(x, y, cx*iLen, 8, 1);
+        myspiWrite(ucTXBuf, iLen*cx*16, MODE_DATA, 1);
 #endif
     } // portrait orientation
 	return 0;
@@ -1511,17 +1636,18 @@ uint8_t *pFont;
 // Draw a string of small (8x8) or large (16x32) characters
 // At the given col+row
 //
-int spilcdWriteString(int x, int y, char *szMsg, unsigned short usFGColor, unsigned short usBGColor, int iFontSize)
+int spilcdWriteString(int x, int y, char *szMsg, int usFGColor, int usBGColor, int iFontSize, int bRender)
 {
 int i, j, k, l, iMaxLen, iLen;
 unsigned char *s;
-unsigned short usFG = (usFGColor >> 8) | ((usFGColor & -1)<< 8);
-unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
+unsigned short usFG = (usFGColor >> 8) | (usFGColor << 8);
+unsigned short usBG = (usBGColor >> 8) | (usBGColor << 8);
+uint16_t usPitch = iScreenPitch/2;
 
 
 	iLen = strlen(szMsg);
 	iMaxLen = (iOrientation == LCD_ORIENTATION_NATIVE) ? iWidth : iHeight;
-
+    if (usBGColor == -1) bRender = 0; // transparent text doesn't get written to the display
 #ifndef __AVR__
 	if (iFontSize == FONT_LARGE) // draw 16x32 font
 	{
@@ -1534,42 +1660,72 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
             uint8_t ucMask;
 			s = (uint8_t *)&ucBigFont[((unsigned char)szMsg[i]-32)*64];
 			usD = &usTemp[0];
+            if (usBGColor == -1) // transparent text is not rendered to the dispaly
+                bRender = 0;
 			if (iOrientation == LCD_ORIENTATION_ROTATED) // rotated
 			{
-				spilcdSetPosition(x+(i*16), y,16,32);
+				spilcdSetPosition(x+(i*16), y,16,32, bRender);
                 for (j=0; j<16; j++) // horizontal
                 {
-                    for (k=31; k>=0; k--) // vertical
+                    if (usBGColor == -1) // transparent text
                     {
-                        ucMask = 1 << (k & 7);
-                        if (s[j+((k>>3)<<4)] & ucMask)
-                            *usD++ = usFG;
-                        else
-                            *usD++ = usBG;
-                    } // for j
+                        usD = (uint16_t *)&pBackBuffer[iOffset + (j*iScreenPitch)];
+                        for (k=31; k>=0; k--) // vertical
+                        {
+                            ucMask = 1 << (k & 7);
+                            if (s[j+((k>>3)<<4)] & ucMask)
+                                *usD = usFG;
+                            usD++;
+                        } // for j
+                    }
+                    else
+                    {
+                        for (k=31; k>=0; k--) // vertical
+                        {
+                            ucMask = 1 << (k & 7);
+                            if (s[j+((k>>3)<<4)] & ucMask)
+                                *usD++ = usFG;
+                            else
+                                *usD++ = usBG;
+                        } // for j
+                    }
                 } // for l
 			}
-			else
+			else // not rotated
 			{ // portrait
-				spilcdSetPosition(x+(i*16), y,16,32);
+				spilcdSetPosition(x+(i*16), y,16,32, bRender);
                 for (l=0; l<4; l++) // 4 sets of 8 rows
                 {
                     uint8_t ucMask = 1;
                     for (k=0; k<8; k++) // for each scanline
                     { // left half
-                        for (j=0; j<16; j++)
+                        if (usBGColor == -1) // transparent text
                         {
-                            if (s[j] & ucMask)
-                                *usD++ = usFG;
-                            else
-                                *usD++ = usBG;
-                        } // for j
+                            uint16_t *d = (uint16_t *)&pBackBuffer[iOffset + ((l*8+k)*iScreenPitch)];
+                            for (j=0; j<16; j++)
+                            {
+                                if (s[j] & ucMask)
+                                    *d = usFG;
+                                d++;
+                            } // for j
+                        }
+                        else
+                        {
+                            for (j=0; j<16; j++)
+                            {
+                                if (s[j] & ucMask)
+                                    *usD++ = usFG;
+                                else
+                                    *usD++ = usBG;
+                            } // for j
+                        }
                         ucMask <<= 1;
                     } // for each scanline
                     s += 16;
 				} // for each set of 8 scanlines
 			} // portrait mode
-			myspiWrite((unsigned char *)usTemp, 1024, MODE_DATA);
+            if (usBGColor != -1) // don't write anything if we're doing transparent text
+                myspiWrite((unsigned char *)usTemp, 1024, MODE_DATA, bRender);
 		} // for each character
 	}
 #endif // !__AVR__
@@ -1577,8 +1733,8 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 	{
 		unsigned short usTemp[64];
 		unsigned short *usD;
-	        int cx;
-        	uint8_t c, *pFont;
+        int cx;
+        uint8_t c, *pFont;
 
         cx = (iFontSize == FONT_NORMAL) ? 8:6;
         pFont = (iFontSize == FONT_NORMAL) ? (uint8_t *)ucFont : (uint8_t *)ucSmallFont;
@@ -1591,39 +1747,67 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 			usD = &usTemp[0];
 			if (iOrientation == LCD_ORIENTATION_ROTATED) // draw rotated
 			{
-				spilcdSetPosition(x+(i*cx), y, cx, 8);
+				spilcdSetPosition(x+(i*cx), y, cx, 8, bRender);
 				for (k=0; k<cx; k++) // for each scanline
 				{
-            			        uint8_t ucMask = 0x80;
+                    uint8_t ucMask = 0x80;
 					c = pgm_read_byte(&s[k]);
-					for (j=0; j<8; j++)
-					{
-						if (c & ucMask)
-							*usD++ = usFG;
-						else
-							*usD++ = usBG;	
-                        			ucMask >>= 1;
-					} // for j
+                    if (usBGColor == -1) // transparent text
+                    {
+                        usD = (uint16_t *)&pBackBuffer[iOffset + (k * iScreenPitch)];
+                        for (j=0; j<8; j++)
+                        {
+                            if (c & ucMask)
+                                *usD = usFG;
+                            usD++;
+                            ucMask >>= 1;
+                        } // for j
+                    }
+                    else
+                    {
+                        for (j=0; j<8; j++)
+                        {
+                            if (c & ucMask)
+                                *usD++ = usFG;
+                            else
+                                *usD++ = usBG;
+                            ucMask >>= 1;
+                        } // for j
+                    }
 				} // for k
 			}
 			else // portrait orientation
 			{
-				spilcdSetPosition(x+(i*cx), y, cx, 8);
-               			uint8_t ucMask = 1;
+				spilcdSetPosition(x+(i*cx), y, cx, 8, bRender);
+                uint8_t ucMask = 1;
 				for (k=0; k<8; k++) // for each scanline
 				{
-					for (j=0; j<cx; j++)
-					{
-						if (pgm_read_byte(&s[j]) & ucMask)
-							*usD++ = usFG;
-						else
-							*usD++ = usBG;
-					} // for j
-                    			ucMask <<= 1;
+                    if (usBGColor == -1) // transparent text
+                    {
+                        usD = (uint16_t *)&pBackBuffer[iOffset + (k * iScreenPitch)];
+                        for (j=0; j<cx; j++)
+                        {
+                            if (pgm_read_byte(&s[j]) & ucMask)
+                                *usD = usFG;
+                            usD++;
+                        } // for j
+                    }
+                    else // regular text
+                    {
+                        for (j=0; j<cx; j++)
+                        {
+                            if (pgm_read_byte(&s[j]) & ucMask)
+                                *usD++ = usFG;
+                            else
+                                *usD++ = usBG;
+                        } // for j
+                    }
+                    ucMask <<= 1;
 				} // for k
 			} // normal orientation
 		// write the data in one shot
-			myspiWrite((unsigned char *)usTemp, cx*16, MODE_DATA);
+            if (usBGColor != -1) // don't write anything if we're doing transparent text
+                myspiWrite((unsigned char *)usTemp, cx*16, MODE_DATA, bRender);
 		}	
 	} // 6x8 and 8x8
     if (iFontSize == FONT_STRETCHED) // 8x8 stretched to 16x16
@@ -1641,45 +1825,75 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
             usD = &usTemp[0];
             if (iOrientation == LCD_ORIENTATION_ROTATED) // draw rotated
             {
-                spilcdSetPosition(x+(i*16), y, 16, 16);
+                spilcdSetPosition(x+(i*16), y, 16, 16, bRender);
                 for (k=0; k<8; k++) // for each scanline
                 {
                     uint8_t ucMask = 0x80;
-		    c = pgm_read_byte(&s[k]);
-                    for (j=0; j<8; j++)
+                    c = pgm_read_byte(&s[k]);
+                    if (usBGColor == -1) // transparent text
                     {
-                        if (c & ucMask) // write 2x2 pixels
+                        usD = (uint16_t *)&pBackBuffer[iOffset + (k * 2 * iScreenPitch)];
+                        for (j=0; j<8; j++)
                         {
-                            usD[0] = usD[1] = usD[16] = usD[17] = usFG;
-                        }
-                        else
-                            usD[0] = usD[1] = usD[16] = usD[17] = usBG;
-                        usD += 2;
-                        ucMask >>= 1;
-                    } // for j
+                            if (c & ucMask) // write 2x2 pixels
+                            {
+                                usD[0] = usD[1] = usD[usPitch] = usD[usPitch+1] = usFG;
+                            }
+                            usD += 2;
+                            ucMask >>= 1;
+                        } // for j
+                    }
+                    else
+                    {
+                        for (j=0; j<8; j++)
+                        {
+                            if (c & ucMask) // write 2x2 pixels
+                            {
+                                usD[0] = usD[1] = usD[16] = usD[17] = usFG;
+                            }
+                            else
+                                usD[0] = usD[1] = usD[16] = usD[17] = usBG;
+                            usD += 2;
+                            ucMask >>= 1;
+                        } // for j
+                    }
                     usD += 16; // skip next scanline since we already drew it
                 } // for k
             }
             else // portrait orientation
             {
-                spilcdSetPosition(x+(i*16), y, 16, 16);
+                spilcdSetPosition(x+(i*16), y, 16, 16, bRender);
                 uint8_t ucMask = 1;
                 for (k=0; k<8; k++) // for each scanline
                 {
-                    for (j=0; j<8; j++)
+                    if (usBGColor == -1) // transparent text
                     {
-                        if (pgm_read_byte(&s[j]) & ucMask)
-                            usD[0] = usD[1] = usD[16] = usD[17] = usFG;
-                        else
-                            usD[0] = usD[1] = usD[16] = usD[17] = usBG;
-                        usD += 2;
-                    } // for j
+                        usD = (uint16_t *)&pBackBuffer[iOffset + (k*2*iScreenPitch)];
+                        for (j=0; j<8; j++)
+                        {
+                            if (pgm_read_byte(&s[j]) & ucMask)
+                                usD[0] = usD[1] = usD[usPitch] = usD[usPitch+1] = usFG;
+                            usD += 2;
+                        } // for j
+                    }
+                    else // regular text drawing
+                    {
+                        for (j=0; j<8; j++)
+                        {
+                            if (pgm_read_byte(&s[j]) & ucMask)
+                                usD[0] = usD[1] = usD[16] = usD[17] = usFG;
+                            else
+                                usD[0] = usD[1] = usD[16] = usD[17] = usBG;
+                            usD += 2;
+                        } // for j
+                    }
                     usD += 16; // skip over scanline we already drew
                     ucMask <<= 1;
                 } // for k
             } // normal orientation
             // write the data in one shot
-            myspiWrite((unsigned char *)usTemp, 512, MODE_DATA);
+            if (usBGColor != -1) // don't write anything if we're doing transparent text
+                myspiWrite((unsigned char *)usTemp, 512, MODE_DATA, bRender);
         }
 
     } // FONT_STRETCHED
@@ -1689,7 +1903,7 @@ unsigned short usBG = (usBGColor >> 8) | ((usBGColor & -1)<< 8);
 // For drawing ellipses, a circle is drawn and the x and y pixels are scaled by a 16-bit integer fraction
 // This function draws a single pixel and scales its position based on the x/y fraction of the ellipse
 //
-void DrawScaledPixel(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFrac, int32_t iYFrac, unsigned short usColor)
+void DrawScaledPixel(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFrac, int32_t iYFrac, unsigned short usColor, int bRender)
 {
     uint8_t ucBuf[2];
     if (iXFrac != 0x10000) x = (x * iXFrac) >> 16;
@@ -1699,10 +1913,10 @@ void DrawScaledPixel(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXF
         return; // off the screen
     ucBuf[0] = (uint8_t)(usColor >> 8);
     ucBuf[1] = (uint8_t)usColor;
-    spilcdSetPosition(x, y, 1, 1);
-    myspiWrite(ucBuf, 2, MODE_DATA);
+    spilcdSetPosition(x, y, 1, 1, bRender);
+    myspiWrite(ucBuf, 2, MODE_DATA, bRender);
 } /* DrawScaledPixel() */
-void DrawScaledLine(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFrac, int32_t iYFrac, unsigned short *pBuf)
+void DrawScaledLine(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFrac, int32_t iYFrac, unsigned short *pBuf, int bRender)
 {
     int32_t iLen, x2;
     if (iXFrac != 0x10000) x = (x * iXFrac) >> 16;
@@ -1715,9 +1929,9 @@ void DrawScaledLine(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFr
     if (x < 0) x = 0;
     if (x2 >= iCurrentWidth) x2 = iCurrentWidth-1;
     iLen = x2 - x + 1; // new length
-    spilcdSetPosition(x, y, iLen, 1);
+    spilcdSetPosition(x, y, iLen, 1, bRender);
 #ifdef ESP32_DMA 
-    myspiWrite((uint8_t*)pBuf, iLen*2, MODE_DATA);
+    myspiWrite((uint8_t*)pBuf, iLen*2, MODE_DATA, bRender);
 #else
     // need to refresh the output data each time
     {
@@ -1726,37 +1940,37 @@ void DrawScaledLine(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFr
       for (i=0; i<iLen; i++)
         pBuf[i+1] = us;
     }
-    myspiWrite((uint8_t*)&pBuf[1], iLen*2, MODE_DATA);
+    myspiWrite((uint8_t*)&pBuf[1], iLen*2, MODE_DATA, bRender);
 #endif
 } /* DrawScaledLine() */
 //
 // Draw the 8 pixels around the Bresenham circle
 // (scaled to make an ellipse)
 //
-void BresenhamCircle(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFrac, int32_t iYFrac, unsigned short iColor, uint16_t *pFill)
+void BresenhamCircle(int32_t iCX, int32_t iCY, int32_t x, int32_t y, int32_t iXFrac, int32_t iYFrac, unsigned short iColor, uint16_t *pFill, int bRender)
 {
     if (pFill != NULL) // draw a filled ellipse
     {
         // for a filled ellipse, draw 4 lines instead of 8 pixels
-        DrawScaledLine(iCX, iCY, x, y, iXFrac, iYFrac, pFill);
-        DrawScaledLine(iCX, iCY, x, -y, iXFrac, iYFrac, pFill);
-        DrawScaledLine(iCX, iCY, y, x, iXFrac, iYFrac, pFill);
-        DrawScaledLine(iCX, iCY, y, -x, iXFrac, iYFrac, pFill);
+        DrawScaledLine(iCX, iCY, x, y, iXFrac, iYFrac, pFill, bRender);
+        DrawScaledLine(iCX, iCY, x, -y, iXFrac, iYFrac, pFill, bRender);
+        DrawScaledLine(iCX, iCY, y, x, iXFrac, iYFrac, pFill, bRender);
+        DrawScaledLine(iCX, iCY, y, -x, iXFrac, iYFrac, pFill, bRender);
     }
     else // draw 8 pixels around the edges
     {
-        DrawScaledPixel(iCX, iCY, x, y, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, -x, y, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, x, -y, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, -x, -y, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, y, x, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, -y, x, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, y, -x, iXFrac, iYFrac, iColor);
-        DrawScaledPixel(iCX, iCY, -y, -x, iXFrac, iYFrac, iColor);
+        DrawScaledPixel(iCX, iCY, x, y, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, -x, y, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, x, -y, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, -x, -y, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, y, x, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, -y, x, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, y, -x, iXFrac, iYFrac, iColor, bRender);
+        DrawScaledPixel(iCX, iCY, -y, -x, iXFrac, iYFrac, iColor, bRender);
     }
 } /* BresenhamCircle() */
 
-void spilcdEllipse(int32_t iCenterX, int32_t iCenterY, int32_t iRadiusX, int32_t iRadiusY, unsigned short usColor, int bFilled)
+void spilcdEllipse(int32_t iCenterX, int32_t iCenterY, int32_t iRadiusX, int32_t iRadiusY, unsigned short usColor, int bFilled, int bRender)
 {
     int32_t iRadius, iXFrac, iYFrac;
     int32_t iDelta, x, y;
@@ -1798,7 +2012,7 @@ void spilcdEllipse(int32_t iCenterX, int32_t iCenterY, int32_t iRadiusX, int32_t
     x = 0; y = iRadius;
     while (x <= y)
     {
-        BresenhamCircle(iCenterX, iCenterY, x, y, iXFrac, iYFrac, usColor, pus);
+        BresenhamCircle(iCenterX, iCenterY, x, y, iXFrac, iYFrac, usColor, pus, bRender);
         x++;
         if (iDelta < 0)
         {
@@ -1832,7 +2046,7 @@ int spilcdSetOrientation(int iOrient)
 //
 // Fill the frame buffer with a single color
 //
-int spilcdFill(unsigned short usData)
+int spilcdFill(unsigned short usData, int bRender)
 {
 int i, y;
 int iOldOrient;
@@ -1842,23 +2056,23 @@ unsigned short *pus = (unsigned short *)ucTXBuf;
 	iOldOrient = iOrientation;
 	iOrientation = LCD_ORIENTATION_NATIVE;
 	spilcdScrollReset();
-	spilcdSetPosition(0,0,iWidth,iHeight);
-	iOrientation = iOldOrient;
+	spilcdSetPosition(0,0,iWidth,iHeight, bRender);
 	usData = (usData >> 8) | (usData << 8); // swap hi/lo byte for LCD
-	for (y=0; y<iHeight; y++)
-	{
+    for (y=0; y<iHeight; y++)
+    {
 // have to do this every time because the buffer gets overrun (no half-duplex mode in Arduino SPI library)
-	        for (i=0; i<iWidth; i++)
-        	        pus[i] = usData;
-		myspiWrite(ucTXBuf, iWidth*2, MODE_DATA); // fill with data byte
-	} // for y
+        for (i=0; i<iWidth; i++)
+            pus[i] = usData;
+        myspiWrite(ucTXBuf, iWidth*2, MODE_DATA, bRender); // fill with data byte
+    } // for y
+    iOrientation = iOldOrient;
 	return 0;
 } /* spilcdFill() */
 //
 // Draw a 16x16 tile as 16x13 (with priority to non-black pixels)
 // This is for drawing a 224x288 image onto a 320x240 display in landscape
 //
-int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch)
+int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch, int bRender)
 {
     unsigned char ucTemp[416];
     int i, j, iPitch16;
@@ -1889,17 +2103,17 @@ int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch)
             }
         } // for i
     } // for j
-    spilcdSetPosition(x, y, 16, 13);
+    spilcdSetPosition(x, y, 16, 13, bRender);
     if (((x + iScrollOffset) % iHeight) > iHeight-16) // need to write in 2 parts since it won't wrap
     {
         int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
-        myspiWrite(ucTemp, iStart*26, MODE_DATA); // first N lines
-        spilcdSetPosition(x+iStart, y, 16-iStart, 13);
-        myspiWrite(&ucTemp[iStart*26], 416-(iStart*26), MODE_DATA);
+        myspiWrite(ucTemp, iStart*26, MODE_DATA, bRender); // first N lines
+        spilcdSetPosition(x+iStart, y, 16-iStart, 13, bRender);
+        myspiWrite(&ucTemp[iStart*26], 416-(iStart*26), MODE_DATA, bRender);
     }
     else // can write in one shot
     {
-        myspiWrite(ucTemp, 416, MODE_DATA);
+        myspiWrite(ucTemp, 416, MODE_DATA, bRender);
     }
     return 0;
     
@@ -1910,7 +2124,7 @@ int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch)
 // This is for drawing 160x144 video games onto a 160x128 display
 // It is assumed that the display is set to LANDSCAPE orientation
 //
-int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch)
+int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch, int bRender)
 {
     unsigned char ucTemp[448];
     int i, j, iPitch32;
@@ -1955,17 +2169,17 @@ int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch)
             }
         } // for i
     } // for j
-    spilcdSetPosition(x, y, 16, 14);
+    spilcdSetPosition(x, y, 16, 14, bRender);
     if (((x + iScrollOffset) % iHeight) > iHeight-16) // need to write in 2 parts since it won't wrap
     {
         int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
-        myspiWrite(ucTemp, iStart*28, MODE_DATA); // first N lines
-        spilcdSetPosition(x+iStart, y, 16-iStart, 14);
-        myspiWrite(&ucTemp[iStart*28], 448-(iStart*28), MODE_DATA);
+        myspiWrite(ucTemp, iStart*28, MODE_DATA, bRender); // first N lines
+        spilcdSetPosition(x+iStart, y, 16-iStart, 14, bRender);
+        myspiWrite(&ucTemp[iStart*28], 448-(iStart*28), MODE_DATA, bRender);
     }
     else // can write in one shot
     {
-        myspiWrite(ucTemp, 448, MODE_DATA);
+        myspiWrite(ucTemp, 448, MODE_DATA, bRender);
     }
     return 0;
 } /* spilcdDrawSmallTile() */
@@ -1987,7 +2201,7 @@ int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch)
 // The x/y coordinates will be scaled 2x in the X direction and 1.5x in the Y
 // It is assumed that the display is set to ROTATED orientation
 //
-int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch)
+int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch, int bRender)
 {
     int i, j, iPitch32;
     uint16_t *d;
@@ -2025,17 +2239,17 @@ int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int
             d += 3;
         } // for i
     } // for j
-    spilcdSetPosition(x, y, cx*2, (cy*3)/2);
+    spilcdSetPosition(x, y, cx*2, (cy*3)/2, bRender);
     if (((x + iScrollOffset) % iHeight) > iHeight-(cx*2)) // need to write in 2 parts since it won't wrap
     {
         int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
-        myspiWrite(ucRXBuf, iStart*cx*3, MODE_DATA); // first N lines
-        spilcdSetPosition(x+iStart, y, (cx*2)-iStart, (cy*3)/2);
-        myspiWrite(&ucRXBuf[iStart*cx*3], (cx*cy*6)-(iStart*cx*3), MODE_DATA);
+        myspiWrite(ucRXBuf, iStart*cx*3, MODE_DATA, bRender); // first N lines
+        spilcdSetPosition(x+iStart, y, (cx*2)-iStart, (cy*3)/2, bRender);
+        myspiWrite(&ucRXBuf[iStart*cx*3], (cx*cy*6)-(iStart*cx*3), MODE_DATA, bRender);
     }
     else // can write in one shot
     {
-        myspiWrite(ucRXBuf, (cx*cy*6), MODE_DATA);
+        myspiWrite(ucRXBuf, (cx*cy*6), MODE_DATA, bRender);
     }
     return 0;
 } /* spilcdDrawScaledTile() */
@@ -2060,7 +2274,7 @@ int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int
 //
 // The x/y coordinates will be scaled as well
 //
-int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch)
+int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch, int bRender)
 {
     int i, j, iPitch16;
     uint16_t *s, *d;
@@ -2205,11 +2419,11 @@ int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPi
     } // for j
 #ifdef ESP32_DMA
     spilcdWaitDMA();
-    spilcdSetPosition(x, y, 40, 40);
+    spilcdSetPosition(x, y, 40, 40, bRender);
     spilcdWriteDataDMA(40*40*2);
 #else
-    spilcdSetPosition(x, y, 40, 40);
-    myspiWrite(ucTXBuf, 40*40*2, MODE_DATA);
+    spilcdSetPosition(x, y, 40, 40, bRender);
+    myspiWrite(ucTXBuf, 40*40*2, MODE_DATA, bRender);
 #endif
     return 0;
 } /* spilcdDraw53Tile() */
@@ -2218,7 +2432,7 @@ int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPi
 // the mask contains 1 bit for every column/row that should be drawn
 // For example, to skip the first 2 columns, the mask value would be 0xfffc
 //
-int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iColMask, int iRowMask)
+int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iColMask, int iRowMask, int bRender)
 {
     unsigned char ucTemp[512]; // fix the byte order first to write it more quickly
     int i, j;
@@ -2245,17 +2459,17 @@ int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iCo
                 d += 2;
             } // for i;
         } // for j
-        spilcdSetPosition(x, y, iNumCols, iNumRows);
+        spilcdSetPosition(x, y, iNumCols, iNumRows, bRender);
         if (((x + iScrollOffset) % iHeight) > iHeight-iNumRows) // need to write in 2 parts since it won't wrap
         {
             int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
-            myspiWrite(ucTemp, iStart*iNumRows*2, MODE_DATA); // first N lines
-            spilcdSetPosition(x+iStart, y, iNumRows-iStart, iNumCols);
-            myspiWrite(&ucTemp[iStart*iNumRows*2], iTotalSize-(iStart*iNumRows*2), MODE_DATA);
+            myspiWrite(ucTemp, iStart*iNumRows*2, MODE_DATA, bRender); // first N lines
+            spilcdSetPosition(x+iStart, y, iNumRows-iStart, iNumCols, bRender);
+            myspiWrite(&ucTemp[iStart*iNumRows*2], iTotalSize-(iStart*iNumRows*2), MODE_DATA, bRender);
         }
         else // can write in one shot
         {
-            myspiWrite(ucTemp, iTotalSize, MODE_DATA);
+            myspiWrite(ucTemp, iTotalSize, MODE_DATA, bRender);
         }
     }
     else // native orientation
@@ -2281,17 +2495,17 @@ int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iCo
                 iMask >>= 1;
             } // for i;
         } // for j
-        spilcdSetPosition(x, y, iNumCols, iNumRows);
+        spilcdSetPosition(x, y, iNumCols, iNumRows, bRender);
         if (((y + iScrollOffset) % iHeight) > iHeight-iNumRows) // need to write in 2 parts since it won't wrap
         {
             int iStart = (iHeight - ((y+iScrollOffset) % iHeight));
-            myspiWrite(ucTemp, iStart*iNumCols*2, MODE_DATA); // first N lines
-            spilcdSetPosition(x, y+iStart, iNumCols, iNumRows-iStart);
-            myspiWrite(&ucTemp[iStart*iNumCols*2], iTotalSize-(iStart*iNumCols*2), MODE_DATA);
+            myspiWrite(ucTemp, iStart*iNumCols*2, MODE_DATA, bRender); // first N lines
+            spilcdSetPosition(x, y+iStart, iNumCols, iNumRows-iStart, bRender);
+            myspiWrite(&ucTemp[iStart*iNumCols*2], iTotalSize-(iStart*iNumCols*2), MODE_DATA, bRender);
         }
         else // can write in one shot
         {
-            myspiWrite(ucTemp, iTotalSize, MODE_DATA);
+            myspiWrite(ucTemp, iTotalSize, MODE_DATA, bRender);
         }
     } // portrait orientation
     return 0;
@@ -2302,7 +2516,7 @@ int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iCo
 // This reverses the pixel byte order and sets a memory "window"
 // of pixels so that the write can occur in one shot
 //
-int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch)
+int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch, int bRender)
 {
     int i, j;
     uint32_t ul32;
@@ -2329,17 +2543,17 @@ int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char 
                 s -= iPitch*2;
             } // for i;
         } // for j
-        spilcdSetPosition(x, y, iTileWidth, iTileHeight);
+        spilcdSetPosition(x, y, iTileWidth, iTileHeight, bRender);
         if (((x + iScrollOffset) % iHeight) > iHeight-iTileWidth) // need to write in 2 parts since it won't wrap
         {
             int iStart = (iHeight - ((x+iScrollOffset) % iHeight));
-            myspiWrite(ucRXBuf, iStart*iTileHeight*2, MODE_DATA); // first N lines
-            spilcdSetPosition(x+iStart, y, iTileWidth-iStart, iTileWidth);
-            myspiWrite(&ucRXBuf[iStart*iTileHeight*2], (iTileWidth*iTileHeight*2)-(iStart*iTileHeight*2), MODE_DATA);
+            myspiWrite(ucRXBuf, iStart*iTileHeight*2, MODE_DATA, bRender); // first N lines
+            spilcdSetPosition(x+iStart, y, iTileWidth-iStart, iTileWidth, bRender);
+            myspiWrite(&ucRXBuf[iStart*iTileHeight*2], (iTileWidth*iTileHeight*2)-(iStart*iTileHeight*2), MODE_DATA, bRender);
         }
         else // can write in one shot
         {
-            myspiWrite(ucRXBuf, iTileWidth*iTileHeight*2, MODE_DATA);
+            myspiWrite(ucRXBuf, iTileWidth*iTileHeight*2, MODE_DATA, bRender);
         }
     }
     else // native orientation
@@ -2355,17 +2569,17 @@ int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char 
                 *d16++ = __builtin_bswap16(*s16++);
             } // for i;
         } // for j
-        spilcdSetPosition(x, y, iTileWidth, iTileHeight);
+        spilcdSetPosition(x, y, iTileWidth, iTileHeight, bRender);
         if (((y + iScrollOffset) % iHeight) > iHeight-iTileHeight) // need to write in 2 parts since it won't wrap
         {
             int iStart = (iHeight - ((y+iScrollOffset) % iHeight));
-            myspiWrite(ucRXBuf, iStart*iTileWidth*2, MODE_DATA); // first N lines
-            spilcdSetPosition(x, y+iStart, iTileWidth, iTileHeight-iStart);
-            myspiWrite(&ucRXBuf[iStart*iTileWidth*2], (iTileWidth*iTileHeight*2)-(iStart*iTileWidth*2), MODE_DATA);
+            myspiWrite(ucRXBuf, iStart*iTileWidth*2, MODE_DATA, bRender); // first N lines
+            spilcdSetPosition(x, y+iStart, iTileWidth, iTileHeight-iStart, bRender);
+            myspiWrite(&ucRXBuf[iStart*iTileWidth*2], (iTileWidth*iTileHeight*2)-(iStart*iTileWidth*2), MODE_DATA, bRender);
         }
         else // can write in one shot
         {
-            myspiWrite(ucRXBuf, iTileWidth*iTileHeight*2, MODE_DATA);
+            myspiWrite(ucRXBuf, iTileWidth*iTileHeight*2, MODE_DATA, bRender);
         }
     } // portrait orientation
     return 0;
@@ -2376,7 +2590,7 @@ int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char 
 // of pixels so that the write can occur in one shot
 // Scales the tile by 150% (for GameBoy/GameGear)
 //
-int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch)
+int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch, int bRender)
 {
     int i, j, iPitch32, iLocalPitch;
     uint32_t ul32A, ul32B, ul32Avg, ul32Avg2;
@@ -2420,8 +2634,8 @@ int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned ch
         } // for i;
         d16 += iLocalPitch*2; // skip lines we already output
     } // for j
-    spilcdSetPosition((x*3)/2, (y*3)/2, (iTileWidth*3)/2, (iTileHeight*3)/2);
-    myspiWrite(ucRXBuf, (iTileWidth*iTileHeight*9)/2, MODE_DATA);
+    spilcdSetPosition((x*3)/2, (y*3)/2, (iTileWidth*3)/2, (iTileHeight*3)/2, bRender);
+    myspiWrite(ucRXBuf, (iTileWidth*iTileHeight*9)/2, MODE_DATA, bRender);
     return 0;
 } /* spilcdDrawTile150() */
 
@@ -2432,7 +2646,7 @@ int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned ch
 // lines are the most extreme version of this condition and will write the data in a single
 // operation.
 //
-void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
+void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor, int bRender)
 {
     int temp;
     int dx = x2 - x1;
@@ -2477,12 +2691,12 @@ void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
             {
                 error += dx;
 		iLen = (x1-x+1);
-                spilcdSetPosition(x, y, iLen, 1);
+                spilcdSetPosition(x, y, iLen, 1, bRender);
 #ifndef ESP32_DMA
 	        for (i=0; i<iLen; i++) // prepare color data for max length line
                    usTemp[i] = us;
 #endif
-                myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA); // write the row we changed
+                myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA, bRender); // write the row we changed
                 y += yinc;
 //                spilcdSetPosY(y, 1); // update the y position only
                 x = x1+1; // we've already written the pixel at x1
@@ -2495,8 +2709,8 @@ void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
             for (i=0; i<iLen; i++) // prepare color data for max length line
                usTemp[i] = us;
 #endif
-            spilcdSetPosition(x, y, iLen, 1);
-            myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA); // write the row we changed
+            spilcdSetPosition(x, y, iLen, 1, bRender);
+            myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA, bRender); // write the row we changed
         }
     }
     else {
@@ -2533,8 +2747,8 @@ void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
       		for (i=0; i<iLen; i++) // prepare color data for max length line
        		    usTemp[i] = us;
 #endif
-                spilcdSetPosition(x, y, 1, iLen);
-                myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA); // write the row we changed
+                spilcdSetPosition(x, y, 1, iLen, bRender);
+                myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA, bRender); // write the row we changed
                 x += xinc;
 //                spilcdSetPosX(x, 1); // update the x position only
                 y = y1+1; // we've already written the pixel at y1
@@ -2547,21 +2761,24 @@ void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor)
             for (i=0; i<iLen; i++) // prepare color data for max length line
                usTemp[i] = us;
 #endif
-            spilcdSetPosition(x, y, 1, iLen);
-            myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA); // write the row we changed
+            spilcdSetPosition(x, y, 1, iLen, bRender);
+            myspiWrite((uint8_t*)usTemp, iLen*2, MODE_DATA, bRender); // write the row we changed
         }
     } // y major case
 } /* spilcdDrawLine() */
 
 //
-// Load a RGB565 bitmap onto the display
+// Draw a 4, 8 or 16-bit Windows uncompressed bitmap onto the display
 // Pass the pointer to the beginning of the BMP file
 // Optionally stretch to 2x size
+// Optimized for drawing to the backbuffer. The transparent color index is only used
+// when drawinng to the back buffer. Set it to -1 to disable
 // returns -1 for error, 0 for success
 //
-int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch)
+int spilcdDrawBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch, int iTransparent, int bRender)
 {
     int iOffBits, iPitch;
+    uint16_t usPalette[256];
     int16_t cx, cy, bpp, y; // offset to bitmap data
     int j, x;
     uint16_t *pus, us, *d, usTemp[320]; // process a line at a time
@@ -2576,10 +2793,40 @@ int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch)
     else
         cy = -cy;
     bpp = pBMP[28] | pBMP[29]<<8;
-    if (bpp != 16) // must be 16 bits per pixel
+    if (bpp != 16 && bpp != 4 && bpp != 8) // must be 4/8/16 bits per pixel
         return -1;
+    if (iDestX + cx > iCurrentWidth || iDestX < 0 || cx < 0)
+        return -1; // invalid
+    if (iDestY + cy > iCurrentHeight || iDestY < 0 || cy < 0)
+        return -1;
+    if (iTransparent != -1) // transparent drawing can only happen on the back buffer
+        bRender = 0;
     iOffBits = pBMP[10] | pBMP[11]<<8;
-    iPitch = ((cx * 2) + 3) & 0xfffc; // must be a multiple of 4 bytes
+    iPitch = (cx * bpp) >> 3; // bytes per line
+    iPitch = (iPitch + 3) & 0xfffc; // must be dword aligned
+    // Get the palette as RGB565 values (if there is one)
+    if (bpp == 4 || bpp == 8)
+    {
+        uint16_t r, g, b, us;
+        int iOff, iColors;
+        iColors = pBMP[46]; // colors used BMP field
+        if (iColors == 0 || iColors > (1<<bpp))
+            iColors = (1 << bpp); // full palette
+        iOff = iOffBits - (4 * iColors); // start of color palette
+        for (x=0; x<iColors; x++)
+        {
+            b = pBMP[iOff++];
+            g = pBMP[iOff++];
+            r = pBMP[iOff++];
+            iOff++; // skip extra byte
+            r >>= 3;
+            us = (r  << 11);
+            g >>= 2;
+            us |= (g << 5);
+            us |= (b >> 3);
+            usPalette[x] = (us >> 8) | (us << 8); // swap byte order for writing to the display
+        }
+    }
     if (bFlipped)
     {
         iOffBits += (cy-1) * iPitch; // start from bottom
@@ -2592,36 +2839,187 @@ int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch)
         if (bStretch)
         {
             int iUSPitch = iPitch >> 1; // modify to index shorts
-            spilcdSetPosition(iDestX, iDestY, cx*2, cy*2);
+            spilcdSetPosition(iDestX, iDestY, cx*2, cy*2, bRender);
             for (x=0; x<cx; x++)
             {
                 pus = (uint16_t *)&pBMP[iOffBits + x*2]; // source line
                 for (j=0; j<2; j++) // for systems without half-duplex, we need to prepare the data for each write
                 {
-                    d = usTemp;
-                    for (y=0; y<cy; y++)
+                    if (bRender)
+                        d = usTemp;
+                    else
+                        d = (uint16_t *)&pBackBuffer[iOffset + (((x * 2) + j) * iScreenPitch)];
+                    if (bpp == 16)
                     {
-                        us = pus[y*iUSPitch];
-                        d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = (us >> 8) | (us << 8); // swap byte order
-                    } // for y
-                    spilcdWriteDataBlock((uint8_t *)usTemp, cy*4); // write the same line twice
+                        if (iTransparent == -1) // no transparency
+                        {
+                            for (y=0; y<cy; y++)
+                            {
+                                us = pus[y*iUSPitch];
+                                d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = (us >> 8) | (us << 8); // swap byte order
+                            } // for y
+                        }
+                        else
+                        {
+                            for (y=0; y<cy; y++)
+                            {
+                                us = pus[y*iUSPitch];
+                                if (us != (uint16_t)iTransparent)
+                                    d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = (us >> 8) | (us << 8); // swap byte order
+                            } // for y
+                        }
+                    }
+                    else if (bpp == 8)
+                    {
+                        uint8_t uc, *s = (uint8_t *)pus;
+                        if (iTransparent == -1) // no transparency
+                        {
+                            for (y=0; y<cy; y++)
+                            {
+                                uc = s[y*iPitch];
+                                us = usPalette[uc];
+                                d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = us;
+                            } // for y
+                        }
+                        else
+                        {
+                            for (y=0; y<cy; y++)
+                            {
+                                uc = s[y*iPitch];
+                                if (uc != (uint8_t)iTransparent)
+                                {
+                                    us = usPalette[uc];
+                                    d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = us;
+                                }
+                            } // for y
+                        }
+                    }
+                    else // 4 bpp
+                    {
+                        uint8_t uc, *s = (uint8_t *)pus;
+                        if (iTransparent == -1) // no transparency
+                        {
+                            for (y=0; y<cy; y++)
+                            {
+                                uc = s[y*iPitch];
+                                if (x & 1)
+                                    us = usPalette[uc >> 4];
+                                else
+                                    us = usPalette[uc & 0xf];
+                                d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = us;
+                            } // for y
+                        }
+                        else
+                        {
+                            for (y=0; y<cy; y++)
+                            {
+                                uint8_t pix;
+                                uc = s[y*iPitch];
+                                if (x & 1)
+                                    pix = uc >> 4;
+                                else
+                                    pix = uc & 0xf;
+                                if (pix != (uint8_t)iTransparent)
+                                    d[(cy-1-y)*2] = d[(cy-1-y)*2 + 1] = usPalette[pix];
+                            } // for y
+                        }
+                    }
+                    if (bRender)
+                        spilcdWriteDataBlock((uint8_t *)usTemp, cy*4, bRender); // write the same line twice
                 } // for j
             } // for x
         } // 2:1
         else // 1:1
         {
             int iUSPitch = iPitch >> 1; // modify to index shorts
-            spilcdSetPosition(iDestX, iDestY, cx, cy);
+            spilcdSetPosition(iDestX, iDestY, cx, cy, bRender);
             for (x=0; x<cx; x++)
             {
-                pus = (uint16_t *)&pBMP[iOffBits + x*2];
-                for (y=0; y<cy; y++)
+                pus = (uint16_t *)&pBMP[iOffBits + ((x*bpp)>>3)];
+                if (bRender)
+                    d = usTemp;
+                else
+                    d = (uint16_t *)&pBackBuffer[iOffset + (x*iScreenPitch)];
+                if (bpp == 16)
                 {
-                    us = pus[0];
-                    usTemp[cy-1-y] = (us >> 8) | (us << 8); // swap byte order
-                    pus += iUSPitch;
+                    if (iTransparent == -1) // no transparency
+                    {
+                        for (y=0; y<cy; y++)
+                        {
+                            us = pus[0];
+                            d[cy-1-y] = (us >> 8) | (us << 8); // swap byte order
+                            pus += iUSPitch;
+                        }
+                    }
+                    else
+                    {
+                        for (y=0; y<cy; y++)
+                        {
+                            us = pus[0];
+                            if (us != (uint16_t)iTransparent)
+                                d[cy-1-y] = (us >> 8) | (us << 8); // swap byte order
+                            pus += iUSPitch;
+                        }
+                    }
+                } else if (bpp == 8)
+                {
+                    uint8_t uc, *s = (uint8_t *)pus;
+                    if (iTransparent == -1) // no transparency
+                    {
+                        for (y=0; y<cy; y++)
+                        {
+                            uc = s[0];
+                            d[cy-1-y] = usPalette[uc];
+                            s += iPitch;
+                        }
+                    }
+                    else
+                    {
+                        for (y=0; y<cy; y++)
+                        {
+                            uc = s[0];
+                            if (uc != (uint8_t)iTransparent)
+                                d[cy-1-y] = usPalette[uc];
+                            s += iPitch;
+                        }
+                    }
                 }
-                spilcdWriteDataBlock((uint8_t *)usTemp, cy*2);
+                else // 4 bpp
+                {
+                    uint8_t uc, *s = (uint8_t *)pus;
+                    if (iTransparent == -1) // no transparency
+                    {
+                        for (y=0; y<cy; y++)
+                        {
+                            uc = s[0];
+                            if (x & 1)
+                                d[cy-1-y] = usPalette[uc & 0xf];
+                            else
+                                d[cy-1-y] = usPalette[uc >> 4];
+                            s += iPitch;
+                        }
+                    }
+                    else
+                    {
+                        for (y=0; y<cy; y++)
+                        {
+                            uc = s[0];
+                            if (x & 1)
+                            {
+                                if ((uc & 0xf) != (uint8_t)iTransparent)
+                                    d[cy-1-y] = usPalette[uc & 0xf];
+                            }
+                            else
+                            {
+                                if ((uc >> 4) != (uint8_t)iTransparent)
+                                d[cy-1-y] = usPalette[uc >> 4];
+                            }
+                            s += iPitch;
+                        }
+                    }
+                }
+                if (bRender)
+                    spilcdWriteDataBlock((uint8_t *)usTemp, cy*2, bRender);
             } // for x
         } // 1:1    } // rotated 90
     }
@@ -2629,37 +3027,213 @@ int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch)
     {
         if (bStretch)
         {
-            spilcdSetPosition(iDestX, iDestY, cx*2, cy*2);
+            spilcdSetPosition(iDestX, iDestY, cx*2, cy*2, bRender);
             for (y=0; y<cy; y++)
             {
                 pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
                 for (j=0; j<2; j++) // for systems without half-duplex, we need to prepare the data for each write
                 {
-                    d = usTemp;
-                    for (x=0; x<cx; x++)
+                    if (bRender)
+                        d = usTemp;
+                    else
+                        d = (uint16_t *)&pBackBuffer[iOffset + (y*iScreenPitch)];
+                    if (bpp == 16)
                     {
-                        us = pus[x];
-                        d[0] = d[1] = (us >> 8) | (us << 8); // swap byte order
-                        d += 2;
-                    } // for x
-                    spilcdWriteDataBlock((uint8_t *)usTemp, cx*4); // write the same line twice
+                        if (iTransparent == -1) // no transparency
+                        {
+                            for (x=0; x<cx; x++)
+                            {
+                                us = pus[x];
+                                d[0] = d[1] = (us >> 8) | (us << 8); // swap byte order
+                                d += 2;
+                            } // for x
+                        }
+                        else
+                        {
+                            for (x=0; x<cx; x++)
+                            {
+                                us = pus[x];
+                                if (us != (uint16_t)iTransparent)
+                                    d[0] = d[1] = (us >> 8) | (us << 8); // swap byte order
+                                d += 2;
+                            } // for x
+                        }
+                    }
+                    else if (bpp == 8)
+                    {
+                        uint8_t *s = (uint8_t *)pus;
+                        if (iTransparent == -1) // no transparency
+                        {
+                            for (x=0; x<cx; x++)
+                            {
+                                d[0] = d[1] = usPalette[*s++];
+                                d += 2;
+                            }
+                        }
+                        else
+                        {
+                            for (x=0; x<cx; x++)
+                            {
+                                uint8_t uc = *s++;
+                                if (uc != (uint8_t)iTransparent)
+                                    d[0] = d[1] = usPalette[uc];
+                                d += 2;
+                            }
+                        }
+                    }
+                    else // 4 bpp
+                    {
+                        uint8_t uc, *s = (uint8_t *)pus;
+                        if (iTransparent == -1) // no transparency
+                        {
+                            for (x=0; x<cx; x+=2)
+                            {
+                                uc = *s++;
+                                d[0] = d[1] = usPalette[uc >> 4];
+                                d[2] = d[3] = usPalette[uc & 0xf];
+                                d += 4;
+                            }
+                        }
+                        else
+                        {
+                            for (x=0; x<cx; x+=2)
+                            {
+                                uc = *s++;
+                                if ((uc >> 4) != (uint8_t)iTransparent)
+                                    d[0] = d[1] = usPalette[uc >> 4];
+                                if ((uc & 0xf) != (uint8_t)iTransparent)
+                                    d[2] = d[3] = usPalette[uc & 0xf];
+                                d += 4;
+                            }
+                        }
+                    }
+                    if (bRender)
+                        spilcdWriteDataBlock((uint8_t *)usTemp, cx*4, bRender); // write the same line twice
                 } // for j
             } // for y
         } // 2:1
         else // 1:1
         {
-            spilcdSetPosition(iDestX, iDestY, cx, cy);
+            spilcdSetPosition(iDestX, iDestY, cx, cy, bRender);
             for (y=0; y<cy; y++)
             {
                 pus = (uint16_t *)&pBMP[iOffBits + (y * iPitch)]; // source line
-                for (x=0; x<cx; x++)
+                if (bpp == 16)
                 {
-                   us = *pus++;
-                   usTemp[x] = (us >> 8) | (us << 8); // swap byte order
+                    if (bRender)
+                        d = usTemp;
+                    else
+                        d = (uint16_t *)&pBackBuffer[iOffset + (y * iScreenPitch)];
+                    if (iTransparent == -1) // no transparency
+                    {
+                        for (x=0; x<cx; x++)
+                        {
+                           us = *pus++;
+                           *d++ = (us >> 8) | (us << 8); // swap byte order
+                        }
+                    }
+                    else // skip transparent pixels
+                    {
+                        for (x=0; x<cx; x++)
+                        {
+                            us = *pus++;
+                            if (us != (uint16_t)iTransparent)
+                             d[0] = (us >> 8) | (us << 8); // swap byte order
+                            d++;
+                        }
+                    }
                 }
-                spilcdWriteDataBlock((uint8_t *)usTemp, cx*2);
+                else if (bpp == 8)
+                {
+                    uint8_t uc, *s = (uint8_t *)pus;
+                    if (bRender)
+                        d = usTemp;
+                    else
+                        d = (uint16_t *)&pBackBuffer[iOffset + (y*iScreenPitch)];
+                    if (iTransparent == -1) // no transparency
+                    {
+                        for (x=0; x<cx; x++)
+                        {
+                            *d++ = usPalette[*s++];
+                        }
+                    }
+                    else
+                    {
+                        for (x=0; x<cx; x++)
+                        {
+                            uc = *s++;
+                            if (uc != iTransparent)
+                                d[0] = usPalette[*s++];
+                            d++;
+                        }
+                    }
+                }
+                else // 4 bpp
+                {
+                    uint8_t uc, *s = (uint8_t *)pus;
+                    if (bRender)
+                        d = usTemp;
+                    else // write to the correct spot directly to save time
+                        d = (uint16_t *)&pBackBuffer[iOffset + (y*iScreenPitch)];
+                    if (iTransparent == -1) // no transparency
+                    {
+                        for (x=0; x<cx; x+=2)
+                        {
+                            uc = *s++;
+                            *d++ = usPalette[uc >> 4];
+                            *d++ = usPalette[uc & 0xf];
+                        }
+                    }
+                    else // check transparent color
+                    {
+                        for (x=0; x<cx; x+=2)
+                        {
+                            uc = *s++;
+                            if ((uc >> 4) != iTransparent)
+                               d[0] = usPalette[uc >> 4];
+                            if ((uc & 0xf) != iTransparent)
+                               d[1] = usPalette[uc & 0xf];
+                            d += 2;
+                        }
+                    }
+                }
+                if (bRender)
+                    spilcdWriteDataBlock((uint8_t *)usTemp, cx*2, bRender);
             } // for y
         } // 1:1
     } // non-rotated
     return 0;
 } /* spilcdLoadBMP() */
+
+#ifndef __AVR__
+//
+// Allocate the back buffer for delayed rendering operations
+// returns -1 for failure, 0 for success
+//
+int spilcdAllocBackbuffer(void)
+{
+    if (pBackBuffer != NULL) // already allocated
+        return -1;
+    iScreenPitch = iWidth * 2;
+    pBackBuffer = (uint8_t *)malloc(iScreenPitch * iHeight);
+    if (pBackBuffer == NULL) // no memory
+        return -1;
+    memset(pBackBuffer, 0, iScreenPitch * iHeight);
+    iOffset = 0; // starting offset
+    iWindowX = iWindowY = 0; // current window = whole display
+    iWindowCX = iWidth;
+    iWindowCY = iHeight;
+    return 0;
+}
+//
+// Free the back buffer
+//
+void spilcdFreeBackbuffer(void)
+{
+    if (pBackBuffer)
+    {
+        free(pBackBuffer);
+        pBackBuffer = NULL;
+    }
+}
+#endif // !__AVR__

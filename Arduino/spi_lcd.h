@@ -75,12 +75,14 @@ int spilcdReadTouchPos(int *pX, int *pY);
 void spilcdShutdown(void);
 
 // Fills the display with the byte pattern
-int spilcdFill(unsigned short usPattern);
+int spilcdFill(unsigned short usPattern, int bRender);
 
 //
 // Draw a rectangle and optionally fill it
+// With the fill option, a color gradient will be created
+// between the top and bottom lines going from usColor1 to usColor2
 //
-void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor, int bFill);
+void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor1, unsigned short usColor2, int bFill, int bRender);
 
 //
 // Reset the scroll position to 0
@@ -103,27 +105,27 @@ void spilcdScroll(int iLines, int iFillColor);
 
 //
 // Draw a NxN tile scaled 150% in both directions
-int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch);
+int spilcdDrawTile150(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch, int bRender);
 
 // Draw a NxN tile
-int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch);
+int spilcdDrawTile(int x, int y, int iTileWidth, int iTileHeight, unsigned char *pTile, int iPitch, int bRender);
 
 // Draw a 16x16 tile with variable cols/rows removed
-int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iColMask, int iRowMask);
+int spilcdDrawMaskedTile(int x, int y, unsigned char *pTile, int iPitch, int iColMask, int iRowMask, int bRender);
 
 // Draw a NxN tile scaled to 2x width, 1.5x height with pixel averaging
-int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch);
+int spilcdDrawScaledTile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch, int bRender);
 
-int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch);
+int spilcdDraw53Tile(int x, int y, int cx, int cy, unsigned char *pTile, int iPitch, int bRender);
 
 // Draw a 16x16 tile as 16x13 (with priority to non-black pixels)
-int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch);
+int spilcdDrawRetroTile(int x, int y, unsigned char *pTile, int iPitch, int bRender);
 
 // Draw a 16x16 tile scaled to 16x14 with pixel averaging
-int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch);
+int spilcdDrawSmallTile(int x, int y, unsigned char *pTile, int iPitch, int bRender);
 
 // Write a text string to the display at x (column 0-83) and y (row 0-5)
-int spilcdWriteString(int x, int y, char *szText, unsigned short usFGColor, unsigned short usBGColor, int iFontSize);
+int spilcdWriteString(int x, int y, char *szText, int iFGColor, int iBGColor, int iFontSize, int bRender);
 
 // Write a text string of 8x8 characters
 // quickly to the LCD with a single data block write.
@@ -134,21 +136,21 @@ int spilcdWriteStringFast(int x, int y, char *szText, unsigned short usFGColor, 
 
 // Sets a pixel to the given color
 // Coordinate system is pixels, not text rows (0-239, 0-319)
-int spilcdSetPixel(int x, int y, unsigned short usPixel);
+int spilcdSetPixel(int x, int y, unsigned short usPixel, int bRender);
 
 // Set the software orientation
 int spilcdSetOrientation(int iOrientation);
 
 // Draw an ellipse with X and Y radius
-void spilcdEllipse(int32_t centerX, int32_t centerY, int32_t radiusX, int32_t radiusY, unsigned short color, int bFilled);
+void spilcdEllipse(int32_t centerX, int32_t centerY, int32_t radiusX, int32_t radiusY, unsigned short color, int bFilled, int bRender);
 //
 // Draw a line between 2 points using Bresenham's algorithm
 // 
-void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor);
+void spilcdDrawLine(int x1, int y1, int x2, int y2, unsigned short usColor, int bRender);
 //
 // Public wrapper function to write data to the display
 //
-void spilcdWriteDataBlock(uint8_t *pData, int iLen);
+void spilcdWriteDataBlock(uint8_t *pData, int iLen, int bRender);
 //
 // Position the "cursor" to the given
 // row and column. The width and height of the memory
@@ -158,14 +160,29 @@ void spilcdWriteDataBlock(uint8_t *pData, int iLen);
 // wrapping the address when reaching the end of the window
 // on the curent row
 //
-void spilcdSetPosition(int x, int y, int w, int h);
+void spilcdSetPosition(int x, int y, int w, int h, int bRender);
 //
-// Load a RGB565 bitmap onto the display
+// Draw a 4, 8 or 16-bit Windows uncompressed bitmap onto the display
 // Pass the pointer to the beginning of the BMP file
 // Optionally stretch to 2x size
 // returns -1 for error, 0 for success
 //
-int spilcdLoadBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch);
+int spilcdDrawBMP(uint8_t *pBMP, int iDestX, int iDestY, int bStretch, int iTransparent, int bRender);
+
+//
+// Show part or all of the back buffer on the display
+// Used after delayed rendering of graphics
+//
+void spilcdShowBuffer(int x, int y, int cx, int cy);
+
+//
+// Allocate the back buffer for delayed rendering operations
+//
+int spilcdAllocBackbuffer(void);
+//
+// Free the back buffer
+//
+void spilcdFreeBackbuffer(void);
 
 //
 // Treat the LCD as a 240x320 portrait-mode image
