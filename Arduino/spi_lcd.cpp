@@ -26,7 +26,7 @@
 #include <spi_lcd.h>
 
 #ifdef HAL_ESP32_HAL_H_
-#define ESP32_DMA
+//#define ESP32_DMA
 #endif
 
 #ifdef ESP32_DMA
@@ -64,6 +64,8 @@ static int iWidth, iHeight;
 static int iCurrentWidth, iCurrentHeight; // reflects virtual size due to orientation
 // For back buffer support
 static int iScreenPitch, iOffset;
+static int iSPIMode;
+static int iMemoryX, iMemoryY; // display oddities with smaller LCDs
 static uint8_t *pBackBuffer = NULL;
 static int iWindowX, iWindowY, iCurrentX, iCurrentY;
 static int iWindowCX, iWindowCY;
@@ -777,7 +779,7 @@ static spi_transaction_t t;
 #else
     if (iMode == MODE_COMMAND)
         spilcdSetMode(MODE_COMMAND);
-    SPI.beginTransaction(SPISettings(iSPISpeed, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(iSPISpeed, MSBFIRST, iSPIMode));
 #ifdef HAL_ESP32_HAL_H_
     SPI.transferBytes(pBuf, ucRXBuf, iLen);
 #else
@@ -888,12 +890,14 @@ unsigned char *s;
 int i, iCount;
    
 	iLEDPin = -1; // assume it's not defined
-	if (iType != LCD_ILI9341 && iType != LCD_ST7735S && iType != LCD_ST7735R && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789 && iType != LCD_ST7789_135)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735S && iType != LCD_ST7735R && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789 && iType != LCD_ST7789_135 && iType != LCD_ST7789_NOCS)
 	{
 		Serial.println("Unsupported display type\n");
 		return -1;
 	}
+    iMemoryX = iMemoryY = 0;
 	iLCDType = iType;
+    iSPIMode = (iType == LCD_ST7789_NOCS) ? SPI_MODE3 : SPI_MODE0;
 	iSPISpeed = iSPIFreq;
 	iScrollOffset = 0; // current hardware scroll register value
 
@@ -926,7 +930,7 @@ int i, iCount;
     
     memset(&devcfg, 0, sizeof(devcfg));
     devcfg.clock_speed_hz = iSPIFreq;
-    devcfg.mode = 0;                         //SPI mode 0
+    devcfg.mode = iSPIMode;                         //SPI mode 0 or 3
     devcfg.spics_io_num = iCS;               //CS pin
     devcfg.queue_size = 7;                          //We want to be able to queue 7 transactions at a time
     devcfg.pre_cb = spi_pre_transfer_callback;  //Specify pre-transfer callback to handle D/C line
@@ -968,14 +972,14 @@ int i, iCount;
 	delayMicroseconds(60000);
     delayMicroseconds(60000);
 	}
-	if (iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
+	if (iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135 || iLCDType == LCD_ST7789_NOCS)
 	{
 		s = uc240x240InitList;
 		if (bFlipped)
-			s[6] = 0xc0; // flip 180
+			s[6] = 0xc8; // flip 180
 		else
-			s[6] = 0x00;
-		if (iLCDType == LCD_ST7789)
+			s[6] = 0x08;
+		if (iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_NOCS)
 		{
 			iCurrentWidth = iWidth = 240;
 			iCurrentHeight = iHeight = 240;
@@ -985,6 +989,17 @@ int i, iCount;
 			iCurrentWidth = iWidth = 135;
 			iCurrentHeight = iHeight = 240;
 		}
+        if (iLCDType == LCD_ST7789_NOCS)
+        {
+            iMemoryY = 80; // 80 pixel offset to visible portion of display
+            iLCDType = LCD_ST7789; // the rest of the behavior is the same
+        }
+        else if (iLCDType == LCD_ST7789_135)
+        {
+            iMemoryX = 52;
+            iMemoryY = 40;
+            iLCDType = LCD_ST7789;
+        }
 	} // ST7789
 	else if (iLCDType == LCD_SSD1351)
 	{
@@ -1046,6 +1061,7 @@ int i, iCount;
             s[5] = 0x00; // normal orientation
         iCurrentWidth = iWidth = 80;
         iCurrentHeight = iHeight = 160;
+        iMemoryX = 24; // x offset of visible area
     }
 	else // ST7735R
 	{
@@ -1412,30 +1428,17 @@ unsigned char ucBuf[8];
 		return;
 	}
 	spilcdWriteCommand(0x2a); // set column address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7735S)
 	{
-                if (iLCDType == LCD_ST7789_135)
-                        x += 52;
+        x += iMemoryX;
 		ucBuf[0] = (unsigned char)(x >> 8);
 		ucBuf[1] = (unsigned char)x;
 		x = x + w - 1;
-		if (iLCDType != LCD_ST7789_135 && x > iWidth-1) x = iWidth-1;
+		if ((x-iMemoryX) > iWidth-1) x = iMemoryX + iWidth-1;
 		ucBuf[2] = (unsigned char)(x >> 8);
 		ucBuf[3] = (unsigned char)x; 
 		myspiWrite(ucBuf, 4, MODE_DATA, 1);
 	}
-    else if (iLCDType == LCD_ST7735S)
-    {
-        x += 24; // offset of 26 pixels
-//        y += 2;
-        ucBuf[0] = (unsigned char)(x >> 8);
-        ucBuf[1] = (unsigned char)x;
-        x = x + w - 1;
-        if (x > 127) x = 127; // memory width
-        ucBuf[2] = (unsigned char)(x >> 8);
-        ucBuf[3] = (unsigned char)x;
-        myspiWrite(ucBuf, 4, MODE_DATA, 1);
-    }
 	else
 	{
 // combine coordinates into 1 write to save time
@@ -1452,14 +1455,13 @@ unsigned char ucBuf[8];
 		myspiWrite(ucBuf, 8, MODE_DATA, 1);
 	}
 	spilcdWriteCommand(0x2b); // set row address
-	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7735S || iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135)
+	if (iLCDType == LCD_ILI9341 || iLCDType == LCD_ILI9342 || iLCDType == LCD_ST7735R || iLCDType == LCD_ST7735S || iLCDType == LCD_ST7789)
 	{
-                if (iLCDType == LCD_ST7789_135)
-                        y += 40;
+        y += iMemoryY;
 		ucBuf[0] = (unsigned char)(y >> 8);
 		ucBuf[1] = (unsigned char)y;
 		y = y + h - 1;
-		if (iLCDType != LCD_ST7789_135 && y > iHeight-1) y = iHeight-1;
+		if ((y-iMemoryY) > iHeight-1) y = iMemoryY + iHeight-1;
 		ucBuf[2] = (unsigned char)(y >> 8);
 		ucBuf[3] = (unsigned char)y;
 		myspiWrite(ucBuf, 4, MODE_DATA, 1);

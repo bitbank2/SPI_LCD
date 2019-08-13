@@ -202,7 +202,8 @@ enum {
    LCD_SSD1351,
    LCD_ILI9342,
    LCD_ST7789,  // 240x240
-   LCD_ST7789_135 // 135x240
+   LCD_ST7789_135, // 135x240
+   LCD_ST7789_NOCS, // 240x240 without CS, vertical offset of 80, MODE3
 };
 
 
