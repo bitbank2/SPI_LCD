@@ -26,7 +26,7 @@
 #include <spi_lcd.h>
 
 #ifdef HAL_ESP32_HAL_H_
-//#define ESP32_DMA
+#define ESP32_DMA
 #endif
 
 #ifdef ESP32_DMA
@@ -890,7 +890,7 @@ unsigned char *s;
 int i, iCount;
    
 	iLEDPin = -1; // assume it's not defined
-	if (iType != LCD_ILI9341 && iType != LCD_ST7735S && iType != LCD_ST7735R && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789 && iType != LCD_ST7789_135 && iType != LCD_ST7789_NOCS)
+	if (iType != LCD_ILI9341 && iType != LCD_ST7735S && iType != LCD_ST7735R && iType != LCD_HX8357 && iType != LCD_SSD1351 && iType != LCD_ILI9342 && iType != LCD_ST7789 && iType != LCD_ST7789_135 && iType != LCD_ST7789_NOCS && iType != LCD_ST7735S_B)
 	{
 		Serial.println("Unsupported display type\n");
 		return -1;
@@ -974,11 +974,15 @@ int i, iCount;
 	}
 	if (iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_135 || iLCDType == LCD_ST7789_NOCS)
 	{
+        uint8_t iBGR;
+        iBGR = 0;
+        if (iLCDType == LCD_ST7789_135 || iLCDType == LCD_ST7789_NOCS)
+            iBGR = 8; // reversed on some
 		s = uc240x240InitList;
 		if (bFlipped)
-			s[6] = 0xc8; // flip 180
+			s[6] = 0xc0 + iBGR; // flip 180
 		else
-			s[6] = 0x08;
+			s[6] = 0x00 + iBGR;
 		if (iLCDType == LCD_ST7789 || iLCDType == LCD_ST7789_NOCS)
 		{
 			iCurrentWidth = iWidth = 240;
@@ -1048,20 +1052,32 @@ int i, iCount;
 		iCurrentWidth = iWidth = 320;
 		iCurrentHeight = iHeight = 480;
 	}
-    else if (iLCDType == LCD_ST7735S)
+    else if (iLCDType == LCD_ST7735S || iLCDType == LCD_ST7735S_B)
     {
+        uint8_t iBGR = 0;
+        if (iLCDType == LCD_ST7735S_B)
+            iBGR = 8;
         s = uc80InitList;
         if (bInvert)
            s[55] = 0x21; // invert on
         else
            s[55] = 0x20; // invert off
         if (bFlipped)
-            s[5] = 0xc0; // flipped 180 degrees
+            s[5] = 0xc0 + iBGR; // flipped 180 degrees
         else
-            s[5] = 0x00; // normal orientation
+            s[5] = 0x00 + iBGR; // normal orientation
         iCurrentWidth = iWidth = 80;
         iCurrentHeight = iHeight = 160;
-        iMemoryX = 24; // x offset of visible area
+        if (iLCDType == LCD_ST7735S_B)
+        {
+            iLCDType = LCD_ST7735S; // the rest is the same
+            iMemoryX = 26; // x offset of visible area
+            iMemoryY = 1;
+        }
+        else
+        {
+            iMemoryX = 24;
+        }
     }
 	else // ST7735R
 	{
@@ -1187,7 +1203,8 @@ void spilcdRectangle(int x, int y, int w, int h, unsigned short usColor1, unsign
 {
 unsigned short *usTemp = (unsigned short *)ucRXBuf;
 int i, j, ty, th, iPerLine, iStart;
-
+uint16_t usColor;
+    
 	// check bounds
 	if (x < 0 || x >= iCurrentWidth || x+w > iCurrentWidth)
 		return; // out of bounds
@@ -1200,7 +1217,7 @@ int i, j, ty, th, iPerLine, iStart;
 	{
         int32_t iDR, iDG, iDB; // current colors and deltas
         int32_t iRAcc, iGAcc, iBAcc;
-        uint16_t usColor, usRInc, usGInc, usBInc;
+        uint16_t usRInc, usGInc, usBInc;
         iRAcc = iGAcc = iBAcc = 0; // color fraction accumulators
         iDB = (int32_t)(usColor2 & 0x1f) - (int32_t)(usColor1 & 0x1f); // color deltas
         usBInc = (iDB < 0) ? 0xffff : 0x0001;
@@ -1260,30 +1277,47 @@ int i, j, ty, th, iPerLine, iStart;
 	}
 	else // outline
 	{
+        usColor = (usColor1 >> 8) | (usColor1 << 8); // swap byte order
 		// draw top/bottom
 		spilcdSetPosition(x, y, w, 1, bRender);
-		myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA, bRender);
+        for (j=0; j<w; j++) // prepare big buffer of color
+            usTemp[j] = usColor;
+        myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA, bRender);
 		spilcdSetPosition(x, y + h-1, w, 1, bRender);
+        for (j=0; j<w; j++) // prepare big buffer of color
+            usTemp[j] = usColor;
 		myspiWrite((unsigned char *)usTemp, w*2, MODE_DATA, bRender);
 		// draw left/right
 		if (((ty + iScrollOffset) % iHeight) > iHeight-th)	
 		{
 			iStart = (iHeight - ((ty+iScrollOffset) % iHeight));
 			spilcdSetPosition(x, y, 1, iStart, bRender);
+            for (j=0; j<iStart; j++) // prepare big buffer of color
+                usTemp[j] = usColor;
 			myspiWrite((unsigned char *)usTemp, iStart*2, MODE_DATA, bRender);
 			spilcdSetPosition(x+w-1, y, 1, iStart, bRender);
+            for (j=0; j<iStart; j++) // prepare big buffer of color
+                usTemp[j] = usColor;
 			myspiWrite((unsigned char *)usTemp, iStart*2, MODE_DATA, bRender);
 			// second half
 			spilcdSetPosition(x,y+iStart, 1, h-iStart, bRender);
+            for (j=0; j<h-iStart; j++) // prepare big buffer of color
+                usTemp[j] = usColor;
 			myspiWrite((unsigned char *)usTemp, (h-iStart)*2, MODE_DATA, bRender);
 			spilcdSetPosition(x+w-1, y+iStart, 1, h-iStart, bRender);
+            for (j=0; j<h-iStart; j++) // prepare big buffer of color
+                usTemp[j] = usColor;
 			myspiWrite((unsigned char *)usTemp, (h-iStart)*2, MODE_DATA, bRender);
 		}
 		else // can do it in 1 shot
 		{
 			spilcdSetPosition(x, y, 1, h, bRender);
+            for (j=0; j<h; j++) // prepare big buffer of color
+                usTemp[j] = usColor;
 			myspiWrite((unsigned char *)usTemp, h*2, MODE_DATA, bRender);
 			spilcdSetPosition(x + w-1, y, 1, h, bRender);
+            for (j=0; j<h; j++) // prepare big buffer of color
+                usTemp[j] = usColor;
 			myspiWrite((unsigned char *)usTemp, h*2, MODE_DATA, bRender);
 		}
 	} // outline
@@ -1308,7 +1342,7 @@ void spilcdShowBuffer(int iStartX, int iStartY, int cx, int cy)
     {
         for (x=iStartX; x<iStartX+cx; x++)
         {
-            s = &pBackBuffer[(x * iScreenPitch) + (iCurrentHeight - iStartY-cy-1)*2];
+            s = &pBackBuffer[(x * iScreenPitch) + (iCurrentHeight - iStartY-cy)*2];
             myspiWrite(s, cy * 2, MODE_DATA, 1);
         }
     }
