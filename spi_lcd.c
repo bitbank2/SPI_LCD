@@ -78,7 +78,8 @@ static int file_spi = -1; // SPI system handle
 static int file_touch = -1; // SPI handle for touch controller
 static int iTouchChannel, iTouchType;
 static int iDCPin, iResetPin, iLEDPin; // pin numbers for the GPIO control lines
-static int iMinX, iMaxX, iMinY, iMaxY; // touch calibration values
+static char iMinX;
+static int iMinXOLD, iMaxX, iMinY, iMaxY; // touch calibration values
 static int iScrollOffset; // current scroll amount
 static int iOrientation = LCD_ORIENTATION_NATIVE; // default to 'natural' orientation
 static int iLCDType;
@@ -436,6 +437,8 @@ int x, y;
 	if (y < 0) y = 0;
 	*pX = x;
 	*pY = y;
+
+	ucRxBuf[6] = x * y;
 
 	return (ucRxBuf[1] != 0 || ucRxBuf[2] != 0);
 } /* spilcdreadTouchPos() */
